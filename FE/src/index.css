@@ -1,0 +1,524 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Toàn trang */
+body {
+  margin: 0;
+  padding: 0;
+  font-family: "Poppins", sans-serif;
+  background: linear-gradient(
+    225deg,
+    #ffb3d9 0%,
+    #ffd1dc 20%,
+    #fff0f5 40%,
+    #e6f3ff 60%,
+    #d1e7ff 80%,
+    #c7e9f1 100%
+  );
+  color: #333;
+  height: 100vh;
+  width: 97vw;
+}
+.header {
+  width: 100%;
+  height: 60px;
+  background: radial-gradient(circle 600px at 0% 200px, #d5c5ff, transparent),
+    radial-gradient(circle 600px at 100% 200px, #d5c5ff, transparent);
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+/*Avatar*/
+.avatar {
+  --avatar-size: 40px; /* chỉnh kích thước ở đây */
+  width: var(--avatar-size);
+  height: var(--avatar-size);
+  border-radius: 50%;
+  overflow: hidden;
+  display: inline-block;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  vertical-align: middle;
+  background-color: #f1f1f1; /* màu nền nếu ảnh chưa load */
+}
+
+/* 👉 phần quan trọng để ảnh hiển thị rõ, đúng tỷ lệ */
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover; /* giữ tỉ lệ ảnh, lấp kín khung */
+  display: block; /* loại bỏ khoảng trắng mặc định của ảnh inline */
+  image-rendering: auto; /* giúp trình duyệt render ảnh mịn hơn */
+  transform: translateZ(0); /* kích hoạt GPU để hiển thị sắc nét */
+}
+/*logout*/
+.logout-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 5px;
+  border: none;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: white;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 10px;
+}
+
+.logout:hover {
+  background: linear-gradient(135deg, #764ba2, #667eea);
+}
+
+.logo {
+  display: flex;
+  justify-content: center; /* Căn giữa theo chiều ngang */
+  align-items: center; /* Căn giữa theo chiều dọc */
+  margin: 0 auto 20px; /* Căn giữa container và tạo khoảng cách dưới */
+  width: fit-content; /* Chỉ rộng bằng nội dung */
+  padding: 5px; /* Padding xung quanh logo */
+  background: linear-gradient(
+    135deg,
+    #667eea,
+    #764ba2
+  ); /* Background gradient */
+  border-radius: 16px; /* Bo góc đẹp */
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3); /* Đổ bóng nhẹ */
+  transition: all 0.3s ease; /* Hiệu ứng chuyển đổi */
+}
+
+.logo-img {
+  width: 50px; /* Logo nhỏ gọn hơn cho header */
+  height: 50px; /* Giữ tỷ lệ vuông */
+  border-radius: 6px; /* Bo góc cho ảnh */
+  object-fit: contain; /* Giữ nguyên tỷ lệ ảnh */
+  background: rgba(255, 255, 255, 0.1); /* Background nhẹ cho ảnh */
+  overflow: hidden; /* Ẩn phần ảnh thừa */
+  border-radius: 16px; /* Bo góc đẹp */
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3); /* Đổ bóng nhẹ */
+  transition: all 0.3s ease; /* Hiệu ứng chuyển đổi */
+}
+
+.logo-img img {
+  width: 100%; /* Ảnh chiếm toàn bộ container */
+  height: 100%; /* Ảnh chiếm toàn bộ container */
+  object-fit: cover; /* Ảnh phủ đầy mà không bị méo */
+}
+
+.logo:hover {
+  transform: translateY(-2px) scale(1.05); /* Hiệu ứng nâng lên và phóng to nhẹ */
+  box-shadow: 0 8px 24px rgba(102, 126, 234, 0.4); /* Bóng đậm hơn khi hover */
+}
+/* Container styling for the app */
+.container {
+  max-width: 550px;
+  margin: 100px auto;
+  background: #fff;
+  padding: 80px;
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  text-align: center;
+}
+
+/* Vùng chứa chính */
+.login-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+/* Thẻ card đăng nhập */
+.login-card {
+  background: #fff;
+  width: 320px;
+  padding: 24px;
+  border-radius: 12px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+  text-align: center;
+  animation: fadeIn 0.6s ease;
+}
+
+/* Tiêu đề */
+.login-title {
+  font-size: 1.5rem;
+  margin-bottom: 6px;
+  color: #2a5298;
+  font-weight: 700;
+}
+
+.login-subtitle {
+  font-size: 0.9rem;
+  color: #666;
+  margin-bottom: 20px;
+}
+
+/* Input + button */
+.login-form {
+  margin-bottom: 1.2rem;
+}
+
+.input-group {
+  margin-bottom: 1rem;
+}
+
+.input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-icon {
+  position: absolute;
+  left: 12px;
+  color: #9ca3af;
+  width: 18px;
+  height: 18px;
+  z-index: 1;
+}
+
+.form-input {
+  width: 100%;
+  padding: 12px 12px 12px 40px;
+  border: 2px solid #e5e7eb;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  background: #fff;
+  transition: all 0.3s ease;
+  box-sizing: border-box;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.form-input::placeholder {
+  color: #9ca3af;
+}
+
+.login-btn {
+  width: 100%;
+  padding: 12px;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  box-shadow: 0 3px 10px rgba(102, 126, 234, 0.3);
+  margin-top: 0.8rem;
+}
+
+.login-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
+}
+
+.login-btn:active {
+  transform: translateY(0);
+}
+
+.login-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.loading-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top: 2px solid white;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* Divider */
+.divider {
+  position: relative;
+  margin: 1.2rem 0;
+  text-align: center;
+}
+
+.divider::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: #e5e7eb;
+}
+
+.divider-text {
+  background: rgba(255, 255, 255, 0.95);
+  color: #6b7280;
+  padding: 0 1rem;
+  font-size: 0.875rem;
+  position: relative;
+}
+
+/* GitHub Button */
+.github-btn {
+  width: 100%;
+  padding: 12px;
+  background: #24292e;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 0.8rem;
+}
+/* Facebook Button */
+.facebook-btn {
+  width: 100%;
+  padding: 12px;
+  background: #1877f2;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-right: 10px;
+}
+.google-btn {
+  width: 100%;
+  padding: 12px;
+  background: #4285f4;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 0.8rem;
+}
+
+.github-btn:hover:not(:disabled) {
+  background: #1a1e22;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(36, 41, 46, 0.3);
+}
+
+.github-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.google-btn:hover:not(:disabled) {
+  background: #3367d6;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(66, 133, 244, 0.3);
+}
+
+.google-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.facebook-btn:hover:not(:disabled) {
+  background: #166fe5;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(24, 119, 242, 0.3);
+}
+
+.facebook-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.loading-spinner-white {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top: 2px solid white;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-right: 10px; /* khoảng cách giữa các nút */
+}
+
+/* Hiệu ứng nhẹ khi hiện */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-15px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ===========================================
+   LOGOUT CONFIRMATION MODAL
+   =========================================== */
+.logout-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.logout-modal {
+  background: white;
+  border-radius: 16px;
+  padding: 0;
+  min-width: 400px;
+  max-width: 500px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  transform: scale(0.95);
+  animation: modalSlideIn 0.3s ease-out forwards;
+}
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.logout-modal-header {
+  padding: 24px 24px 16px 24px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.logout-modal-header h3 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: #333;
+  text-align: center;
+}
+
+.logout-modal-body {
+  padding: 24px;
+  text-align: center;
+}
+
+.logout-modal-body p {
+  margin: 0 0 20px 0;
+  font-size: 16px;
+  color: #666;
+  line-height: 1.5;
+}
+
+.user-info-confirm {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 12px;
+  margin: 16px 0;
+}
+
+.avatar-small {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #e9ecef;
+}
+
+.user-info-confirm span {
+  font-weight: 500;
+  color: #495057;
+}
+
+.logout-modal-footer {
+  padding: 16px 24px 24px 24px;
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.btn {
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-weight: 500;
+  font-size: 14px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 100px;
+}
+
+.btn-cancel {
+  background: #f8f9fa;
+  color: #495057;
+  border: 1px solid #dee2e6;
+}
+
+.btn-cancel:hover {
+  background: #e9ecef;
+  transform: translateY(-1px);
+}
+
+.btn-confirm {
+  background: linear-gradient(135deg, #ff4757, #ff3742);
+  color: white;
+  box-shadow: 0 4px 12px rgba(255, 71, 87, 0.3);
+}
+
+.btn-confirm:hover {
+  background: linear-gradient(135deg, #ff3742, #ff2731);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(255, 71, 87, 0.4);
+}
+
+.btn:active {
+  transform: translateY(0);
+}
