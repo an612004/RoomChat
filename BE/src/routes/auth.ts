@@ -3,6 +3,7 @@ import axios from 'axios';
 import jwt from 'jsonwebtoken';
 import { db } from '../config/firebaseConfig';
 import admin from 'firebase-admin';
+import emailService from '../services/emailService';
 
 const router: Router = express.Router();
 
@@ -356,6 +357,230 @@ router.post('/firebase-auth', async (req: Request, res: Response): Promise<void>
     res.status(500).json({ 
       success: false, 
       message: 'Firebase authentication failed' 
+    });
+  }
+});
+
+// OTP Storage (In production, use Redis or database)
+interface OTPSession {
+  email: string;
+  otpCode: string;
+  expiresAt: Date;
+  attempts: number;
+}
+
+const otpSessions = new Map<string, OTPSession>();
+
+// Generate random OTP
+const generateOTP = (): string => {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+};
+
+// Generate session token
+const generateSessionToken = (): string => {
+  return Math.random().toString(36).substring(2) + Date.now().toString(36);
+};
+
+// Send OTP endpoint
+router.post('/send-otp', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      res.status(400).json({
+        success: false,
+        message: 'Email is required'
+      });
+      return;
+    }
+
+    // Validate Gmail
+    const gmailPattern = /^[a-zA-Z0-9._%+-]+@gmail\.com$/;
+    if (!gmailPattern.test(email)) {
+      res.status(400).json({
+        success: false,
+        message: 'Please provide a valid Gmail address'
+      });
+      return;
+    }
+
+    // Generate OTP and session token
+    const otpCode = generateOTP();
+    const sessionToken = generateSessionToken();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    // Store OTP session
+    otpSessions.set(sessionToken, {
+      email,
+      otpCode,
+      expiresAt,
+      attempts: 0
+    });
+
+    // Send OTP via email
+    let emailSent = false;
+    if (process.env.NODE_ENV === 'production' || process.env.GMAIL_USER) {
+      emailSent = await emailService.sendOTPEmail(email, otpCode);
+      
+      if (!emailSent) {
+        console.log('⚠️ Email sending failed, falling back to console log');
+      }
+    }
+    
+    // For development or fallback, also log the OTP
+    if (!emailSent || process.env.NODE_ENV === 'development') {
+      console.log(`🔐 OTP for ${email}: ${otpCode}`);
+      console.log(`📧 Session Token: ${sessionToken}`);
+    }
+
+    res.json({
+      success: true,
+      message: emailSent ? 
+        `Mã OTP đã được gửi đến ${email}. Vui lòng kiểm tra hộp thư của bạn.` : 
+        `Mã OTP đã được tạo cho ${email}`,
+      sessionToken,
+      // Remove this in production
+      otpCode: process.env.NODE_ENV === 'development' ? otpCode : undefined
+    });
+
+  } catch (error) {
+    console.error('Send OTP error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to send OTP'
+    });
+  }
+});
+
+// Verify OTP endpoint
+router.post('/verify-otp', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { email, otpCode, sessionToken } = req.body;
+
+    if (!email || !otpCode || !sessionToken) {
+      res.status(400).json({
+        success: false,
+        message: 'Email, OTP code, and session token are required'
+      });
+      return;
+    }
+
+    // Get OTP session
+    const session = otpSessions.get(sessionToken);
+    if (!session) {
+      res.status(400).json({
+        success: false,
+        message: 'Invalid or expired session'
+      });
+      return;
+    }
+
+    // Check expiration
+    if (new Date() > session.expiresAt) {
+      otpSessions.delete(sessionToken);
+      res.status(400).json({
+        success: false,
+        message: 'OTP has expired'
+      });
+      return;
+    }
+
+    // Check email match
+    if (session.email !== email) {
+      res.status(400).json({
+        success: false,
+        message: 'Email mismatch'
+      });
+      return;
+    }
+
+    // Check attempts limit
+    if (session.attempts >= 3) {
+      otpSessions.delete(sessionToken);
+      res.status(400).json({
+        success: false,
+        message: 'Too many failed attempts'
+      });
+      return;
+    }
+
+    // Verify OTP
+    if (session.otpCode !== otpCode) {
+      session.attempts++;
+      res.status(400).json({
+        success: false,
+        message: 'Invalid OTP code'
+      });
+      return;
+    }
+
+    // OTP verified successfully, clean up session
+    otpSessions.delete(sessionToken);
+
+    // Check if user exists in Firestore
+    let userData;
+    const usersRef = db.collection('users');
+    const existingUser = await usersRef.where('email', '==', email).get();
+
+    if (existingUser.empty) {
+      // Create new user
+      const newUserData = {
+        email: email,
+        name: email.split('@')[0], // Use email prefix as name
+        avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(email)}&background=random`,
+        provider: 'email',
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        lastLoginAt: admin.firestore.FieldValue.serverTimestamp()
+      };
+
+      const newUserRef = await usersRef.add(newUserData);
+      userData = { id: newUserRef.id, ...newUserData };
+
+      console.log('✅ New user created:', userData);
+    } else {
+      // Update existing user
+      const userDoc = existingUser.docs[0];
+      const userRef = userDoc.ref;
+      
+      await userRef.update({
+        lastLoginAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      userData = { id: userDoc.id, ...userDoc.data() };
+      console.log('✅ Existing user logged in:', userData);
+    }
+
+    // Save login history
+    await db.collection('loginHistory').add({
+      userId: userData.id,
+      provider: 'email',
+      loginTime: admin.firestore.FieldValue.serverTimestamp(),
+      ip: req.ip || req.connection.remoteAddress || 'unknown'
+    });
+
+    // Generate app token
+    const appToken = jwt.sign(
+      { 
+        userId: userData.id,
+        email: email,
+        provider: 'email'
+      },
+      process.env.JWT_SECRET || 'fallback_secret',
+      { expiresIn: '7d' }
+    );
+
+    res.json({
+      success: true,
+      message: 'OTP verified successfully',
+      user: userData,
+      token: appToken
+    });
+
+  } catch (error) {
+    console.error('Verify OTP error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to verify OTP'
     });
   }
 });

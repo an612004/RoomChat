@@ -1,14 +1,10 @@
 import { initializeApp, cert, getApps, App } from 'firebase-admin/app';
 import { getFirestore, Firestore } from 'firebase-admin/firestore';
-import firebase from 'firebase/app';
-import 'firebase/firestore';
-import 'firebase/analytics'
-import 'firebase/auth';
+import { getAuth, GoogleAuthProvider } from "firebase/auth";
 console.log('🔄 Checking Firebase connection...');
 
 let db: Firestore;
 let app: App;
-
 try {
   // Check if Firebase app is already initialized
   if (getApps().length === 0) {

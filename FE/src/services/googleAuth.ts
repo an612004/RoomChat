@@ -1,6 +1,5 @@
 import { signInWithPopup, GoogleAuthProvider, User, UserCredential } from 'firebase/auth';
 import { auth } from '../config/firebase';
-import { ApiResponse } from '../types';
 
 interface GoogleAuthResponse {
   success: boolean;
@@ -39,16 +38,16 @@ class GoogleAuthService {
         body: JSON.stringify({ idToken })
       });
       
-      const backendResult: ApiResponse = await response.json();
+      const backendResult: any = await response.json();
       
       if (backendResult.success) {
-        localStorage.setItem('authToken', backendResult.data.token);
-        localStorage.setItem('user', JSON.stringify(backendResult.data.user));
+        localStorage.setItem('authToken', backendResult.token);
+        localStorage.setItem('user', JSON.stringify(backendResult.user));
         
         return {
           success: true,
-          user: backendResult.data.user,
-          token: backendResult.data.token
+          user: backendResult.user,
+          token: backendResult.token
         };
       } else {
         throw new Error(backendResult.message || 'Backend authentication failed');

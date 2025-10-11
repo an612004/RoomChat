@@ -59,8 +59,12 @@ app.use('*', (req: Request, res: Response) => {
   res.status(404).json({ error: 'Route not found' });
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`Server running on http://localhost:${PORT}`);
   console.log(`API Documentation available at http://localhost:${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  
+  // Verify email service connection
+  const { default: emailService } = await import('./services/emailService');
+  await emailService.verifyConnection();
 });

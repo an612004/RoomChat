@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import useAuth from '../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
+import { LogOut } from 'lucide-react';
 
 const Header: React.FC = () => {
   const { user, isLoggedIn, logout } = useAuth();
@@ -40,7 +41,7 @@ const Header: React.FC = () => {
                 onClick={() => setShowConfirm(true)}
                 className="logout-btn"
               >
-                Logout
+                <LogOut size={20} color="white" />
               </button>
             </div>
           ) : (

@@ -3,18 +3,21 @@ import { Github, Mail, Facebook, Chrome } from 'lucide-react';
 import githubAuthService from '../services/githubAuth';
 import facebookAuthService from '../services/facebookAuth';
 import googleAuthService from '../services/googleAuth';
+import emailOTPService from '../services/emailOTPAuth';
+import OTPVerification from './OTPVerification';
 import { useNavigate } from 'react-router-dom';
 import { LoadingStates } from '../types';
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState<string>('');
-  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [loadingStates, setLoadingStates] = useState<LoadingStates>({
     github: false,
     facebook: false,
     email: false
   });
   const [isGoogleLoading, setIsGoogleLoading] = useState<boolean>(false);
+  const [showOTPVerification, setShowOTPVerification] = useState<boolean>(false);
+  const [sessionToken, setSessionToken] = useState<string>('');
   const navigate = useNavigate();
 
   // Kiểm tra redirect result từ Facebook khi component mount
@@ -43,12 +46,22 @@ const Login: React.FC = () => {
       return;
     }
 
-    setIsLoading(true);
+    setLoadingStates(prev => ({ ...prev, email: true }));
     
-    setTimeout(() => {
-      setIsLoading(false);
-      alert(`Mã xác nhận đã được gửi tới ${email}`);
-    }, 2000);
+    try {
+      const result = await emailOTPService.sendOTP(email);
+      
+      if (result.success && result.sessionToken) {
+        setSessionToken(result.sessionToken);
+        setShowOTPVerification(true);
+      } else {
+        alert(result.error || 'Không thể gửi mã OTP. Vui lòng thử lại.');
+      }
+    } catch (error: any) {
+      alert('Có lỗi xảy ra khi gửi mã OTP');
+    } finally {
+      setLoadingStates(prev => ({ ...prev, email: false }));
+    }
   };
 
   const handleGithubAuth = async (): Promise<void> => {
@@ -107,6 +120,36 @@ const Login: React.FC = () => {
     }
   };
 
+  const handleOTPSuccess = (user: any, token: string): void => {
+    localStorage.setItem('authToken', token);
+    localStorage.setItem('user', JSON.stringify(user));
+    navigate('/home');
+  };
+
+  const handleBackToLogin = (): void => {
+    setShowOTPVerification(false);
+    setSessionToken('');
+  };
+
+  // Show OTP Verification if email OTP was sent
+  if (showOTPVerification) {
+    return (
+      <div className='container'>
+        <h1>Welcome to Anbi</h1>
+        <div className="login-container">
+          <div className="login-card">
+            <OTPVerification
+              email={email}
+              sessionToken={sessionToken}
+              onBack={handleBackToLogin}
+              onSuccess={handleOTPSuccess}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className='container'>
       <h1>
@@ -138,10 +181,10 @@ const Login: React.FC = () => {
 
             <button
               type="submit"
-              disabled={isLoading}
-              className={`login-btn ${isLoading ? 'loading' : ''}`}
+              disabled={loadingStates.email}
+              className={`login-btn ${loadingStates.email ? 'loading' : ''}`}
             >
-              {isLoading ? (
+              {loadingStates.email ? (
                 <div className="loading-spinner"></div>
               ) : (
                 <>
@@ -183,7 +226,7 @@ const Login: React.FC = () => {
               <div className="loading-spinner-white"></div>
             ) : (
               <>
-                <Chrome size={20} />
+                <img src="https://img.icons8.com/?size=100&id=17949&format=png&color=000000" alt="Google Icon" width={20} />
                 Login with Google
               </>
             )}
