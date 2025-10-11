@@ -1,19 +1,27 @@
-import { signInWithPopup, signInWithRedirect, getRedirectResult } from 'firebase/auth';
+import { signInWithPopup, signInWithRedirect, getRedirectResult, User, UserCredential } from 'firebase/auth';
 import { auth, facebookProvider } from '../config/firebase';
+import { ApiResponse } from '../types';
+
+interface FacebookAuthResponse {
+  success: boolean;
+  user?: any;
+  token?: string;
+  error?: string;
+}
 
 class FacebookAuthService {
   // Facebook Login với Popup
-  async loginWithPopup() {
+  async loginWithPopup(): Promise<FacebookAuthResponse> {
     try {
       console.log('🔵 Starting Facebook login with popup...');
       
-      const result = await signInWithPopup(auth, facebookProvider);
-      const user = result.user;
+      const result: UserCredential = await signInWithPopup(auth, facebookProvider);
+      const user: User = result.user;
       
       console.log('✅ Facebook login successful:', user);
       
       // Lấy Firebase ID token
-      const idToken = await user.getIdToken();
+      const idToken: string = await user.getIdToken();
       
       // Gửi token tới backend để verify và lưu user
       const response = await fetch('http://localhost:3000/auth/firebase-auth', {
@@ -24,23 +32,23 @@ class FacebookAuthService {
         body: JSON.stringify({ idToken })
       });
       
-      const backendResult = await response.json();
+      const backendResult: ApiResponse = await response.json();
       
       if (backendResult.success) {
         // Lưu thông tin user vào localStorage
-        localStorage.setItem('authToken', backendResult.token);
-        localStorage.setItem('user', JSON.stringify(backendResult.user));
+        localStorage.setItem('authToken', backendResult.data.token);
+        localStorage.setItem('user', JSON.stringify(backendResult.data.user));
         
         return {
           success: true,
-          user: backendResult.user,
-          token: backendResult.token
+          user: backendResult.data.user,
+          token: backendResult.data.token
         };
       } else {
         throw new Error(backendResult.message || 'Backend authentication failed');
       }
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Facebook login error:', error);
       
       let errorMessage = 'Facebook login failed';
@@ -61,11 +69,11 @@ class FacebookAuthService {
   }
 
   // Facebook Login với Redirect (backup method)
-  async loginWithRedirect() {
+  async loginWithRedirect(): Promise<FacebookAuthResponse | void> {
     try {
       console.log('🔵 Starting Facebook login with redirect...');
       await signInWithRedirect(auth, facebookProvider);
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Facebook redirect login error:', error);
       return {
         success: false,
@@ -75,16 +83,16 @@ class FacebookAuthService {
   }
 
   // Xử lý kết quả redirect (gọi khi trang load lại)
-  async handleRedirectResult() {
+  async handleRedirectResult(): Promise<FacebookAuthResponse | null> {
     try {
-      const result = await getRedirectResult(auth);
+      const result: UserCredential | null = await getRedirectResult(auth);
       
       if (result) {
-        const user = result.user;
+        const user: User = result.user;
         console.log('✅ Facebook redirect login successful:', user);
         
         // Lấy Firebase ID token
-        const idToken = await user.getIdToken();
+        const idToken: string = await user.getIdToken();
         
         // Gửi token tới backend để verify và lưu user
         const response = await fetch('http://localhost:3000/auth/firebase-auth', {
@@ -95,16 +103,16 @@ class FacebookAuthService {
           body: JSON.stringify({ idToken })
         });
         
-        const backendResult = await response.json();
+        const backendResult: ApiResponse = await response.json();
         
         if (backendResult.success) {
-          localStorage.setItem('authToken', backendResult.token);
-          localStorage.setItem('user', JSON.stringify(backendResult.user));
+          localStorage.setItem('authToken', backendResult.data.token);
+          localStorage.setItem('user', JSON.stringify(backendResult.data.user));
           
           return {
             success: true,
-            user: backendResult.user,
-            token: backendResult.token
+            user: backendResult.data.user,
+            token: backendResult.data.token
           };
         } else {
           throw new Error(backendResult.message || 'Backend authentication failed');
@@ -112,7 +120,7 @@ class FacebookAuthService {
       }
       
       return null;
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Facebook redirect result error:', error);
       return {
         success: false,
@@ -122,14 +130,14 @@ class FacebookAuthService {
   }
 
   // Logout
-  async logout() {
+  async logout(): Promise<FacebookAuthResponse> {
     try {
       await auth.signOut();
       localStorage.removeItem('authToken');
       localStorage.removeItem('user');
       console.log('✅ Facebook logout successful');
       return { success: true };
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Facebook logout error:', error);
       return { success: false, error: 'Logout failed' };
     }

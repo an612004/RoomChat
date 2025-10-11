@@ -1,14 +1,21 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
-const LoginSuccess = () => {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+interface UserData {
+  name: string;
+  email: string;
+  avatar: string;
+  provider?: string;
+}
+
+const LoginSuccess: React.FC = () => {
+  const [user, setUser] = useState<UserData | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
   useEffect(() => {
-    const handleSuccess = async () => {
+    const handleSuccess = async (): Promise<void> => {
       try {
         // Get token and user data from URL params
         const token = searchParams.get('token');
@@ -16,7 +23,7 @@ const LoginSuccess = () => {
         
         if (token && userParam) {
           // Parse user data from URL
-          const userData = JSON.parse(decodeURIComponent(userParam));
+          const userData: UserData = JSON.parse(decodeURIComponent(userParam));
           
           // Store token and user data
           localStorage.setItem('authToken', token);
@@ -35,7 +42,7 @@ const LoginSuccess = () => {
           console.error('❌ No token or user data found in URL');
           navigate('/?error=missing_data');
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('Login success handling error:', error);
         navigate('/?error=processing_failed');
       }
@@ -65,16 +72,16 @@ const LoginSuccess = () => {
           <h1 className="login-title">Login Successful!</h1>
           <div className="user-info">
             <div className='avatar'>
-                <img 
-              src={user.avatar} 
-              alt={user.name}
-              className="user-avatar"
-            />
+              <img 
+                src={user.avatar} 
+                alt={user.name}
+                className="user-avatar"
+              />
             </div>
             <h3>Welcome, {user.name}!</h3>
             <p className="user-email">{user.email}</p>
             <p className="provider-badge">
-              🐙 Signed in with GitHub
+              🐙 Signed in with {user.provider || 'GitHub'}
             </p>
           </div>
           <p className="redirect-message">

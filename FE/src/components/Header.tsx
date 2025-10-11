@@ -2,12 +2,12 @@ import React, { useState } from 'react';
 import useAuth from '../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 
-const Header = () => {
+const Header: React.FC = () => {
   const { user, isLoggedIn, logout } = useAuth();
   const navigate = useNavigate();
-  const [showConfirm, setShowConfirm] = useState(false);
+  const [showConfirm, setShowConfirm] = useState<boolean>(false);
 
-  const handleLogout = () => {
+  const handleLogout = (): void => {
     logout();
     navigate('/login');
     setShowConfirm(false);
@@ -37,13 +37,11 @@ const Header = () => {
                 <span className="text-white text-sm">Hi, {user.name}</span>
               </div>
               <button
-                onClick={() => setShowConfirm(true)} // ✅ sửa ở đây
+                onClick={() => setShowConfirm(true)}
                 className="logout-btn"
               >
                 Logout
               </button>
-
-
             </div>
           ) : (
             <button onClick={() => navigate('/login')} className="login-btn">Login</button> 

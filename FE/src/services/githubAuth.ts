@@ -1,11 +1,34 @@
 // GitHub Authentication Service
+
+interface GitHubUser {
+  id: number;
+  login: string;
+  name: string | null;
+  email: string | null;
+  avatar_url: string;
+  html_url: string;
+}
+
+interface AuthResponse {
+  success: boolean;
+  authUrl?: string;
+  message?: string;
+}
+
+interface UserData {
+  user: GitHubUser;
+  token: string;
+}
+
 class GitHubAuthService {
+  private baseURL: string;
+
   constructor() {
     this.baseURL = 'http://localhost:3000/auth';
   }
 
   // Start GitHub OAuth flow
-  async initiateGitHubLogin() {
+  async initiateGitHubLogin(): Promise<void> {
     try {
       console.log('🔄 Initiating GitHub login...');
       console.log('🌐 Requesting:', `${this.baseURL}/github`);
@@ -18,7 +41,7 @@ class GitHubAuthService {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
       
-      const data = await response.json();
+      const data: AuthResponse = await response.json();
       console.log('📦 Response data:', data);
       
       if (data.success && data.authUrl) {
@@ -28,7 +51,7 @@ class GitHubAuthService {
       } else {
         throw new Error(`Backend error: ${data.message || 'Failed to get GitHub auth URL'}`);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ GitHub login error:', error);
       
       // More specific error messages
@@ -45,14 +68,14 @@ class GitHubAuthService {
   }
 
   // Handle login success callback
-  handleLoginSuccess() {
+  handleLoginSuccess(): UserData | null {
     const urlParams = new URLSearchParams(window.location.search);
     const token = urlParams.get('token');
     const userStr = urlParams.get('user');
     
     if (token && userStr) {
       try {
-        const user = JSON.parse(decodeURIComponent(userStr));
+        const user: GitHubUser = JSON.parse(decodeURIComponent(userStr));
         
         // Store token and user info
         localStorage.setItem('authToken', token);
@@ -62,7 +85,7 @@ class GitHubAuthService {
         window.history.replaceState({}, document.title, '/dashboard');
         
         return { token, user };
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error parsing user data:', error);
         return null;
       }
@@ -72,7 +95,7 @@ class GitHubAuthService {
   }
 
   // Get stored user info
-  getCurrentUser() {
+  getCurrentUser(): UserData | null {
     const userStr = localStorage.getItem('user');
     const token = localStorage.getItem('authToken');
     
@@ -82,7 +105,7 @@ class GitHubAuthService {
           user: JSON.parse(userStr),
           token: token
         };
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error parsing user data:', error);
         this.logout();
         return null;
@@ -93,19 +116,19 @@ class GitHubAuthService {
   }
 
   // Check if user is authenticated
-  isAuthenticated() {
+  isAuthenticated(): boolean {
     return !!this.getCurrentUser();
   }
 
   // Logout user
-  logout() {
+  logout(): void {
     localStorage.removeItem('authToken');
     localStorage.removeItem('user');
     window.location.href = '/login';
   }
 
   // Verify token with backend
-  async verifyToken() {
+  async verifyToken(): Promise<boolean> {
     const token = localStorage.getItem('authToken');
     
     if (!token) return false;
@@ -117,9 +140,9 @@ class GitHubAuthService {
         }
       });
       
-      const data = await response.json();
+      const data: AuthResponse = await response.json();
       return data.success;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Token verification error:', error);
       this.logout();
       return false;
