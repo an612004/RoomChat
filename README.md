@@ -2,13 +2,17 @@
 
 ---
 
-# 📞 **Support & Contact**
+## 📞 **Support & Contact**
 
 - **Developer:** anbi
 - **Email:** hobinhan@gmail.com
 
-## Node.js + Express ( Backend)
+### Node.js + Express ( Backend)
 
-## React + Vite ( Frontend)
+### React + Vite ( Frontend)
 
-## firebase ( Database)
+### firebase ( Database) + Mongodb
+
+---
+
+- **Project status:** in progress
