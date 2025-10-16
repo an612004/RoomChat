@@ -1,4 +1,4 @@
-# 🚀 Mini Trello App
+# 🚀 Social Network Anbi
 
 ---
 
