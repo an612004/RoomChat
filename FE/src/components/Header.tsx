@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import useAuth from '../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
-import { LogOut } from 'lucide-react';
+import { LogOut , Bell , House , TvMinimalPlay , Blocks , MessageCircleMore } from 'lucide-react';
 
 const Header: React.FC = () => {
   const { user, isLoggedIn, logout } = useAuth();
@@ -16,36 +16,77 @@ const Header: React.FC = () => {
 
   return (
     <header className='header'>
-      <div className="flex items-center justify-between w-full">
-        <div className="flex items-center space-x-2">
-          <div className='logo-img'>
-            <img src="/logo.png" alt="Logo" />
+      <div className="header-content">
+        {/* Logo Section */}
+        <div className="header-brand">
+          <div className='logo-img animate-jelly'>
+            <img src="/logo.png" alt="Anbi Logo" />
           </div>
-          <span className="text-white font-semibold text-lg"></span>
+          <div className="brand-info">
+            <h2 className="brand-title">Anbi</h2>
+            <span className="brand-tagline">Connect & Chat</span>
+          </div>
         </div>
+
+        {/* Navigation Menu */}
+        <nav className="header-nav">
+          <button className="nav-item active" onClick={() => navigate('/home')}>
+            <span className="nav-icon"><House size={16} /></span>
+            <span className="nav-text">Trang Chủ</span>
+          </button>
+          <button className="nav-item" onClick={() => navigate('/entertainment')}>
+            <span className="nav-icon"><TvMinimalPlay size={16} /></span>
+            <span className="nav-text">Giải Trí</span>
+          </button>
+          <button className="nav-item" onClick={() => navigate('/community')}>
+            <span className="nav-icon"><Blocks size={16} /></span>
+            <span className="nav-text">Cộng Đồng</span>
+          </button>
+          <button className="nav-item" onClick={() => navigate('/Chat')}>
+            <span className="nav-icon"><MessageCircleMore size={16} /></span>
+            <span className="nav-text">Chat Riêng</span>
+          </button>
+        </nav>
         
-        <div>
+        {/* User Actions */}
+        <div className="header-actions">
           {isLoggedIn && user ? (
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2">
-                <div className='avatar'>
+            <>
+              {/* Notification Bell */}
+              <button className="action-btn notification-btn" title="Thông báo">
+                <Bell size={18} />
+              </button>
+              
+              {/* User Profile */}
+              <div className="user-profile">
+                <div className="user-avatar">
                   <img 
                     src={user.avatar} 
                     alt={user.name}
-                    className="w-8 h-8 rounded-full border-2 border-white object-cover"
+                    className="avatar-img"
                   />
+                  <div className="online-indicator"></div>
                 </div>
-                <span className="text-white text-sm">Hi, {user.name}</span>
+                <div className="user-info">
+                  <span className="user-greeting">Xin chào</span>
+                 <span className="user-name text-black font-semibold">{user.name}</span>
+
+                </div>
               </div>
+              
+              {/* Logout Button */}
               <button
                 onClick={() => setShowConfirm(true)}
-                className="logout-btn"
+                className="action-btn logout-btn"
+                title="Đăng xuất"
               >
-                <LogOut size={20} color="white" />
+                <LogOut size={18} />
               </button>
-            </div>
+            </>
           ) : (
-            <button onClick={() => navigate('/login')} className="login-btn">Login</button> 
+            <button onClick={() => navigate('/login')} className="login-btn">
+              Đăng nhập
+            </button> 
           )}
         </div>
       </div>

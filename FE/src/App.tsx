@@ -6,6 +6,7 @@ import AdminPage from './pages/AdminPage'
 import Notfound from './pages/Notfound'
 import Home from './pages/Home'
 import './index.css'
+import Chat from './pages/Chat'
 
 const App: React.FC = () => {
   // const ProtectedRoute = ({ children }) => {
@@ -28,6 +29,7 @@ const App: React.FC = () => {
         <Route path="/home" element={<Home />} />
         <Route path="/admin" element={<AdminPage />} />
         <Route path="*" element={<Notfound />} />
+        <Route path="/chat" element={<Chat />} />
       </Routes>
     </BrowserRouter>
   )

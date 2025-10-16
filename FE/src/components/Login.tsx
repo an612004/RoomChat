@@ -151,104 +151,110 @@ const Login: React.FC = () => {
   }
 
   return (
-    <div className='container'>
-      <h1>
-        Welcome to Anbi
-      </h1>
-      <div className="login-container">
-        <div className="login-card">
-          {/* Header */}
-          <div className="login-header">
-            <h1 className="login-title">Login</h1>
-            <p className="login-subtitle">Select login method</p>
+    <div className="modern-login-wrapper">
+      <div className="modern-login-container">
+        {/* Header Section */}
+        <div className="modern-header">
+          <div className="logo-section">
+            <div className="logo-circle">
+              <div>
+                <img className='logo-img2 animate-jelly' src="/public/logo.png" alt="Anbi Logo" width={30} />
+              </div>
+            </div>
           </div>
+          <h1 className="welcome-title">Welcome back</h1>
+          <p className="welcome-subtitle">Choose your preferred login method</p>
+        </div>
 
-          {/* Gmail Form */}
-          <form onSubmit={handleSendCode} className="login-form">
-            <div className="input-group">
-              <div className="input-wrapper">
-                <Mail className="input-icon" />
+        {/* Login Methods Grid */}
+        <div className="login-methods">
+          {/* Email OTP Card */}
+          <div className="method-card primary-method">
+            <div className="method-header">
+              <Mail className="method-icon" size={24} />
+              <span className="method-title">Email OTP</span>
+            </div>
+            <form onSubmit={handleSendCode} className="method-form">
+              <div className="modern-input">
                 <input
                   type="email"
-                  placeholder="Enter your Gmail address"
+                  placeholder="your.email@gmail.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="form-input"
+                  className="modern-input-field"
                   required
                 />
               </div>
-            </div>
+              <button
+                type="submit"
+                disabled={loadingStates.email}
+                className={`modern-btn primary ${loadingStates.email ? 'loading' : ''}`}
+              >
+                {loadingStates.email ? (
+                  <div className="spinner"></div>
+                ) : (
+                  'Send Code'
+                )}
+              </button>
+            </form>
+          </div>
 
-            <button
-              type="submit"
-              disabled={loadingStates.email}
-              className={`login-btn ${loadingStates.email ? 'loading' : ''}`}
+          {/* Social Login Cards */}
+          <div className="social-methods">
+            {/* GitHub */}
+            <button 
+              className={`social-card github ${loadingStates.github ? 'loading' : ''}`}
+              onClick={handleGithubAuth}
+              disabled={loadingStates.github}
             >
-              {loadingStates.email ? (
-                <div className="loading-spinner"></div>
+              {loadingStates.github ? (
+                <div className="spinner white"></div>
               ) : (
                 <>
-                  <Mail size={18} />
-                  Send confirmation code
+                  <Github size={20} />
+                  <span>GitHub</span>
+                  <div className="dev-badge">Dev</div>
                 </>
               )}
             </button>
-          </form>
 
-          {/* Divider */}
-          <div className="divider">
-            <span className="divider-text">Or continue with</span>
-          </div>
+            {/* Google */}
+            <button
+              onClick={handleGoogleLogin}
+              disabled={isGoogleLoading}
+              className={`social-card google ${isGoogleLoading ? 'loading' : ''}`}
+            >
+              {isGoogleLoading ? (
+                <div className="spinner"></div>
+              ) : (
+                <>
+                  <img src="https://img.icons8.com/?size=100&id=17949&format=png&color=000000" alt="Google" width={20} />
+                  <span>Google</span>
+                </>
+              )}
+            </button>
 
-          {/* GitHub Login */}
-          <button 
-            className={`github-btn animate-zoom-in ${loadingStates.github ? 'loading' : ''}`} 
-            onClick={handleGithubAuth}
-            disabled={loadingStates.github}
-          >
-            {loadingStates.github ? (
-              <div className="loading-spinner-white"></div>
-            ) : (
-              <div>
-                <Github size={20} />
-                Login with GitHub
-              </div>
-            )}
-          </button>
-         
-          {/* Google Login */}
-          <button
-            onClick={handleGoogleLogin}
-            disabled={isGoogleLoading}
-            className={`google-btn ${isGoogleLoading ? 'loading' : ''}`}
-          >
-            {isGoogleLoading ? (
-              <div className="loading-spinner-white"></div>
-            ) : (
-              <>
-                <img src="https://img.icons8.com/?size=100&id=17949&format=png&color=000000" alt="Google Icon" width={20} />
-                Login with Google
-              </>
-            )}
-          </button>
-
-          <div>
-            {/* Facebook Login */}
+            {/* Facebook */}
             <button
               onClick={handleFacebookLogin}
               disabled={loadingStates.facebook}
-              className={`facebook-btn ${loadingStates.facebook ? 'loading' : ''}`}
+              className={`social-card facebook ${loadingStates.facebook ? 'loading' : ''}`}
             >
               {loadingStates.facebook ? (
-                <div className="loading-spinner-white"></div>
+                <div className="spinner white"></div>
               ) : (
                 <>
                   <Facebook size={20} />
-                  Login with Facebook
+                  <span>Facebook</span>
                 </>
               )}
             </button>
           </div>
+        </div>
+
+        {/* Footer */}
+        <div className="login-footer">
+          <p>Secure login powered by modern authentication</p>
         </div>
       </div>
     </div>

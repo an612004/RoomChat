@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { href, Link } from 'react-router-dom';
 
 interface User {
   id?: string;
@@ -76,6 +77,9 @@ const AdminPage: React.FC = () => {
       <div className="py-8">
         <div className="max-w-7xl mx-auto px-4">
           <h1 className="text-3xl font-bold text-gray-900 mb-8">Firebase Data Dashboard</h1>
+          <div>
+            <Link to="/" className="text-blue-600 hover:underline mb-4 inline-block">← Back to Home</Link>
+          </div>
         
           {/* Users Section */}
           <div className="bg-white rounded-lg shadow mb-8">
