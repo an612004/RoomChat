@@ -1,4 +1,5 @@
 import { useState } from "react";
+import "./Slidebar.css";
 import {
   Plus,
   MessageCircle,
@@ -43,7 +44,7 @@ export default function LeftSidebar() {
   };
 
   return (
-    <div className="relative flex-shrink-0">
+  <div className="relative flex-shrink-0 sidebar-responsive">
       {/* Nút mở lại sidebar khi bị đóng */}
       {!open && (
         <button
@@ -63,12 +64,14 @@ export default function LeftSidebar() {
         className={`h-screen sidebar-gradient 
                     text-gray-700 border-r border-purple-200 shadow-xl
                     transition-all duration-300 ease-in-out
-                    ${!open ? "w-0 overflow-hidden" : collapsed ? "w-16" : "w-64"}`}
+                    ${!open ? "w-0 overflow-hidden" : collapsed ? "w-16" : "w-64"}
+                    sidebar-main-responsive
+                    ${collapsed ? "sidebar-collapsed-mobile" : ""}`}
       >
         <div className="flex flex-col h-full">
           {/* Header */}
           <div className="flex items-center justify-between px-3 py-3 border-b border-purple-200 
-                         header-gradient">
+                         header-gradient sidebar-header-responsive">
             <div className="flex items-center gap-2">
               <div className="relative">
                 <div 
@@ -111,9 +114,10 @@ export default function LeftSidebar() {
           </div>
 
           {/* Nút tạo phòng */}
-          <div className="p-3 border-b border-purple-200">
+          <div className="p-3 border-b border-purple-200 sidebar-create-responsive">
             <button
-              onClick={handleCreateRoom}
+              onClick={handleCreateRoom} 
+              
               className={`group relative ${
                 collapsed 
                   ? "w-10 h-10 rounded-lg flex items-center justify-center mx-auto" 
@@ -138,7 +142,7 @@ export default function LeftSidebar() {
 
           {/* Danh sách phòng */}
           <div className="flex-1 p-2.5 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-400 
-                         scrollbar-track-transparent">
+                         scrollbar-track-transparent sidebar-list-responsive">
             {!collapsed && (
               <div className="flex items-center justify-between mb-3">
                 {/* <h3 className="text-xs font-bold text-gray-600 uppercase tracking-wide flex items-center gap-1.5">
@@ -229,7 +233,7 @@ export default function LeftSidebar() {
           </div>
 
           {/* Footer - User Profile */}
-          <div className="mt-auto p-3 border-t border-purple-200 bg-purple-50">
+          <div className="mt-auto p-3 border-t border-purple-200 bg-purple-50 sidebar-footer-responsive">
             {!collapsed ? (
               <div className="flex items-center gap-2.5">
                 <div className="relative">
@@ -258,7 +262,7 @@ export default function LeftSidebar() {
                            transition-all duration-300 hover:scale-105 border border-transparent hover:border-red-200"
                   title="Đăng xuất"
                 >
-                  <LogOut size={14} />
+                  <LogOut size={25} />
                 </button>
               </div>
             ) : (
@@ -267,7 +271,7 @@ export default function LeftSidebar() {
                   <img
                     src={user?.avatar || "/default-avatar.png"}
                     alt="User Avatar"
-                    className="w-5 h-5 rounded-full object-cover border border-purple-300 shadow-sm"
+                    className="avatar-small"
                     title={user?.name || "User"}
                   />
                   <div className="absolute -bottom-0.5 -right-0.5 w-1.5 h-1.5 rounded-full border"
@@ -276,11 +280,11 @@ export default function LeftSidebar() {
                 
                 <button
                   onClick={() => navigate("/home")}
-                  className="p-1.5 rounded-lg text-gray-500 hover:text-red-500 hover:bg-red-100
+                  className="p-5 rounded-lg text-gray-500 hover:text-red-500 hover:bg-red-100
                            transition-all duration-300 hover:scale-105 border border-transparent hover:border-red-200"
                   title="Đăng xuất"
                 >
-                  <LogOut size={13} />
+                  <LogOut size={20} />
                 </button>
               </div>
             )}
@@ -288,12 +292,12 @@ export default function LeftSidebar() {
         </div>
       </div>
 
-      {/* Create Room Modal */}
+      {/* Create Room Modal
       <Createroom
         isOpen={showCreateForm}
         onClose={handleCloseForm}
         onSubmit={handleSubmitRoom}
-      />
+      /> */}
     </div>
   );
 }

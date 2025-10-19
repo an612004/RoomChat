@@ -37,14 +37,14 @@ const Notfound: React.FC = () => {
 
       {/* Nút quay lại */}
       <motion.a
-        href="/"
+        href="/home"
         className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-full shadow-md transition-all duration-300 hover:scale-105"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.9 }}
       >
         <Home className="w-5 h-5" />
-        Go to Login
+        Go to Home Page
       </motion.a>
     </div>
   );

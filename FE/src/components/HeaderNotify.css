@@ -1,0 +1,97 @@
+.notify-dot {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 9px;
+  height: 9px;
+  background: linear-gradient(90deg,#ec4899,#6366f1);
+  border-radius: 50%;
+  box-shadow: 0 0 6px #ec489999;
+  border: 2px solid #fff;
+  animation: pulseDot 1.2s infinite;
+}
+@keyframes pulseDot {
+  0% { box-shadow: 0 0 6px #ec489999; }
+  50% { box-shadow: 0 0 12px #6366f1cc; }
+  100% { box-shadow: 0 0 6px #ec489999; }
+}
+.notify-popup {
+  position: absolute;
+  top: 48px;
+  right: 16px;
+  min-width: 320px;
+  max-width: 90vw;
+  background: linear-gradient(135deg,#f3f4f6 70%,#e0e7ff 100%);
+  border-radius: 1rem;
+  box-shadow: 0 8px 32px 0 #6366f144;
+  z-index: 100;
+  padding: 0.5rem 0.5rem 0.5rem 0.5rem;
+  border: 1.5px solid #a5b4fc;
+  animation: fadeInUp 0.3s;
+}
+@keyframes fadeInUp {
+  0% { opacity: 0; transform: translateY(20px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.notify-popup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.5rem 0.2rem 0.5rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+.notify-close {
+  background: none;
+  border: none;
+  font-size: 1.3rem;
+  color: #6366f1;
+  cursor: pointer;
+  font-weight: bold;
+  padding: 0 0.3rem;
+  transition: color 0.2s;
+}
+.notify-close:hover {
+  color: #ec4899;
+}
+.notify-popup-list {
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 0.5rem 0.2rem;
+}
+.notify-popup-item {
+  background: #fff;
+  border-radius: 0.7rem;
+  box-shadow: 0 2px 8px 0 #6366f122;
+  margin-bottom: 0.7rem;
+  padding: 0.7rem 0.8rem 0.6rem 0.8rem;
+  border-left: 4px solid #6366f1;
+  position: relative;
+}
+.notify-popup-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #6366f1;
+  margin-bottom: 0.3rem;
+  word-break: break-word;
+}
+.notify-popup-content {
+  font-size: 0.97rem;
+  color: #374151;
+  margin-bottom: 0.3rem;
+  word-break: break-word;
+}
+.notify-popup-content a {
+  color: #ec4899;
+  text-decoration: underline;
+  word-break: break-all;
+}
+.notify-popup-content a:hover {
+  color: #6366f1;
+}
+.notify-popup-date {
+  font-size: 0.85rem;
+  color: #6b7280;
+  position: absolute;
+  bottom: 0.5rem;
+  right: 0.8rem;
+}

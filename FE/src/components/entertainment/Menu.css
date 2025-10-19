@@ -1,0 +1,120 @@
+.menu-gradient {
+  background: linear-gradient(90deg, #e0e7ff 0%, #fce7f3 50%, #fef9c3 100%);
+  box-shadow: 0 4px 24px rgba(139, 92, 246, 0.08);
+  border-radius: 1rem;
+}
+
+.menu-btn {
+  background: rgba(255, 255, 255, 0.18);
+  color: #7c3aed;
+  border-radius: 1rem;
+  padding: 0.5rem 1.5rem;
+  font-weight: 600;
+  border: 2px solid transparent;
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.08);
+  transition: all 0.2s;
+}
+.menu-btn:hover,
+.menu-btn:focus {
+  background: #f3e8ff;
+  color: #db2777;
+  border-color: #a78bfa;
+}
+
+.menu-dropdown {
+  background: rgba(255, 255, 255, 0.85);
+  color: #7c3aed;
+  border-radius: 1rem;
+  box-shadow: 0 8px 32px rgba(139, 92, 246, 0.1);
+  border: 2px solid #e0e7ff;
+}
+.menu-dropdown li:hover {
+  background: #fce7f3;
+  color: #db2777;
+}
+
+.menu-search {
+  background: rgba(255, 255, 255, 0.28);
+  border-radius: 999px;
+  padding: 0.75rem 1.5rem;
+  border: 2px solid #e0e7ff;
+  box-shadow: 0 4px 16px rgba(139, 92, 246, 0.12);
+  color: #7c3aed;
+  font-size: 1.08rem;
+  width: 300px;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.menu-search input {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #7c3aed;
+  font-size: 1.08rem;
+  width: 100%;
+  margin-left: 0.5rem;
+  padding: 0.25rem 0;
+}
+.menu-search input::placeholder {
+  color: #db2777;
+  opacity: 0.7;
+}
+
+.menu-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4rem;
+  padding: 2.5rem 5rem;
+  width: 103%;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+.menu-list {
+  display: flex;
+  gap: 4rem;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+@media (max-width: 900px) {
+  .menu-container {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2rem;
+    padding: 1.5rem 1rem;
+  }
+  .menu-list {
+    justify-content: center;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+  }
+  .menu-search {
+    margin-left: 0;
+    width: 100%;
+    max-width: 350px;
+    margin: 0 auto;
+  }
+}
+@media (max-width: 600px) {
+  .menu-container {
+    padding: 1rem 0.5rem;
+    gap: 1rem;
+  }
+  .menu-list {
+    gap: 1rem;
+    font-size: 0.95rem;
+  }
+  .menu-btn {
+    padding: 0.5rem 1rem;
+    font-size: 0.95rem;
+  }
+  .menu-search {
+    max-width: 100%;
+    padding: 0.5rem 0.5rem;
+    font-size: 0.95rem;
+  }
+}

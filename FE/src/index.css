@@ -66,7 +66,7 @@ body {
     #e6f3ff 60%,
     #d1e7ff 80%,
     #c7e9f1 100%
-  );
+  ) !important;
   color: #333;
   height: 100vh;
   width: 97vw;
@@ -2124,4 +2124,11 @@ body {
 }
 .shadow-pink-400\/50 {
   box-shadow: 0 0 10px rgba(244, 114, 182, 0.5);
+}
+
+.nav-item.active {
+  background: linear-gradient(90deg, #a78bfa, #f472b6);
+  color: #fff;
+  font-weight: bold;
+  box-shadow: 0 2px 8px #a78bfa33;
 }

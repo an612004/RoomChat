@@ -585,4 +585,50 @@ router.post('/verify-otp', async (req: Request, res: Response): Promise<void> =>
   }
 });
 
+// Thông báo chung cho mọi user
+// Tạo thông báo (admin)
+router.post('/notifications', async (req: Request, res: Response) => {
+  try {
+    const { title, content, link } = req.body;
+    if (!title || !content) {
+      return res.status(400).json({ success: false, message: 'Thiếu tiêu đề hoặc nội dung' });
+    }
+    const notifyData = {
+      title,
+      content,
+      link: link || '',
+      date: admin.firestore.Timestamp.now() // Lưu kiểu Firestore Timestamp
+    };
+    const docRef = await db.collection('notifications').add(notifyData);
+    return res.json({ success: true, id: docRef.id });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: 'Lỗi khi lưu thông báo' });
+  }
+});
+
+// Lấy tất cả thông báo
+router.get('/notifications', async (req: Request, res: Response) => {
+  try {
+    const snapshot = await db.collection('notifications').orderBy('date', 'desc').get();
+    const notifications = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    res.json({ success: true, notifications });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Lỗi khi lấy thông báo' });
+  }
+});
+
+// Xóa thông báo (admin)
+router.delete('/notifications/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ success: false, message: 'Thiếu id thông báo' });
+    }
+    await db.collection('notifications').doc(id).delete();
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: 'Lỗi khi xóa thông báo' });
+  }
+});
+
 export default router;
