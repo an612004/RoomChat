@@ -4,11 +4,37 @@
 
 ## 📊 **Project Progress**
 
-<div style="width:100%;background:#f1f5f9;border-radius:12px;height:22px;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,0.1);margin-bottom:16px">
-  <div style="width:65%;height:100%;background:linear-gradient(90deg,#4f46e5,#60a5fa);border-radius:12px;text-align:center;color:white;font-weight:600;font-size:13px;line-height:22px">
-    45% Complete
+<div style="
+  width:100%;
+  max-width:480px;
+  background:#e5e7eb;
+  border-radius:12px;
+  height:22px;
+  overflow:hidden;
+  box-shadow:inset 0 1px 2px rgba(0,0,0,0.1);
+  margin:8px 0 18px;
+">
+  <div style="
+    width:45%;
+    height:100%;
+    background:linear-gradient(90deg,#3b82f6,#60a5fa);
+    border-radius:12px;
+    text-align:center;
+    color:#fff;
+    font-weight:600;
+    font-size:13px;
+    line-height:22px;
+  ">
+    45%
   </div>
 </div>
+
+---
+
+## 📞 **Support & Contact**
+
+- 👤 **Developer:** anbi
+- 📧 **Email:** [hobinhan@gmail.com](mailto:hobinhan@gmail.com)
 
 ---
 
@@ -20,11 +46,4 @@
 
 ---
 
-## 📞 **Support & Contact**
-
-- 👤 **Developer:** anbi
-- 📧 **Email:** [hobinhan@gmail.com](mailto:hobinhan@gmail.com)
-
----
-
-⭐ _Project status:_ **In Progress**
+⭐ **Project status:** 🛠 _In Progress (45% Completed)_
