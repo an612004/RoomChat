@@ -585,22 +585,25 @@ router.post('/verify-otp', async (req: Request, res: Response): Promise<void> =>
   }
 });
 
-// Thông báo chung cho mọi user
+
+// Notification model
+import Notification from '../models/Notification';
+
 // Tạo thông báo (admin)
 router.post('/notifications', async (req: Request, res: Response) => {
   try {
-    const { title, content, link } = req.body;
+    const { title, content, link, userId } = req.body;
     if (!title || !content) {
       return res.status(400).json({ success: false, message: 'Thiếu tiêu đề hoặc nội dung' });
     }
-    const notifyData = {
+    const notify = new Notification({
       title,
       content,
       link: link || '',
-      date: admin.firestore.Timestamp.now() // Lưu kiểu Firestore Timestamp
-    };
-    const docRef = await db.collection('notifications').add(notifyData);
-    return res.json({ success: true, id: docRef.id });
+      userId: userId || null,
+    });
+    await notify.save();
+    return res.json({ success: true, id: notify._id });
   } catch (err) {
     return res.status(500).json({ success: false, message: 'Lỗi khi lưu thông báo' });
   }
@@ -609,8 +612,7 @@ router.post('/notifications', async (req: Request, res: Response) => {
 // Lấy tất cả thông báo
 router.get('/notifications', async (req: Request, res: Response) => {
   try {
-    const snapshot = await db.collection('notifications').orderBy('date', 'desc').get();
-    const notifications = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const notifications = await Notification.find().sort({ createdAt: -1 });
     res.json({ success: true, notifications });
   } catch (err) {
     res.status(500).json({ success: false, message: 'Lỗi khi lấy thông báo' });
@@ -624,10 +626,31 @@ router.delete('/notifications/:id', async (req: Request, res: Response) => {
     if (!id) {
       return res.status(400).json({ success: false, message: 'Thiếu id thông báo' });
     }
-    await db.collection('notifications').doc(id).delete();
+    await Notification.findByIdAndDelete(id);
     return res.json({ success: true });
   } catch (err) {
     return res.status(500).json({ success: false, message: 'Lỗi khi xóa thông báo' });
+  }
+});
+
+// Đánh dấu thông báo đã đọc cho 1 user (thêm userId vào readBy)
+router.patch('/notifications/mark-read', async (req: Request, res: Response) => {
+  try {
+    const { ids, markAll, userId } = req.body;
+    if (!userId) return res.status(400).json({ success: false, message: 'Thiếu userId' });
+    if (markAll) {
+      // add userId to readBy for all notifications (no duplicates)
+      await Notification.updateMany({}, { $addToSet: { readBy: userId } });
+      return res.json({ success: true });
+    }
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ success: false, message: 'Thiếu ids hoặc markAll' });
+    }
+    await Notification.updateMany({ _id: { $in: ids } }, { $addToSet: { readBy: userId } });
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('Mark read error', err);
+    return res.status(500).json({ success: false, message: 'Lỗi khi cập nhật trạng thái đọc' });
   }
 });
 

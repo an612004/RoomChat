@@ -42,9 +42,10 @@ const AdminPage: React.FC = () => {
   // Delete notification
   const handleDeleteNotify = async (idx: number) => {
     const notify = notifications[idx];
-    if (!notify.id) return;
+    const notifyId = notify._id || notify.id;
+    if (!notifyId) return;
     try {
-      await fetch(`http://localhost:3000/auth/notifications/${notify.id}`, {
+      await fetch(`http://localhost:3000/auth/notifications/${notifyId}`, {
         method: 'DELETE'
       });
       fetchNotifications();
@@ -164,43 +165,51 @@ const AdminPage: React.FC = () => {
           {Array.isArray(notifications) && notifications.length === 0 ? (
             <div className="empty-text">Chưa có thông báo nào</div>
           ) : (
-            Array.isArray(notifications) && notifications.map((notify: any, idx: number) => {
-              const link = notify.link || extractFirstLink(notify.content);
-              // Format Firestore Timestamp or string date
-              let dateStr = '';
-              if (notify.date && typeof notify.date === 'object' && (notify.date.seconds || notify.date._seconds)) {
-                const sec = notify.date.seconds || notify.date._seconds;
-                dateStr = new Date(sec * 1000).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' });
-              } else if (notify.date) {
-                const d = new Date(notify.date);
-                dateStr = isNaN(d.getTime()) ? '' : d.toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' });
-              }
-              return (
-                <div key={idx} className="notify-item" style={{position: 'relative', minWidth: 220, margin: '8px', borderRadius: '16px', boxShadow: '0 2px 8px #eee', background: '#fff', padding: '18px 18px 12px 18px'}}>
-                  <button
-                    className="notify-delete-btn"
-                    title="Xóa thông báo"
-                    style={{position: 'absolute', top: 8, right: 12, background: 'none', border: 'none', color: '#e11d48', fontWeight: 'bold', fontSize: 14, cursor: 'pointer', zIndex: 2}}
-                    onClick={() => handleDeleteNotify(idx)}
-                  >
-                    ✖
-                  </button>
-                  <button
-                    className="notify-btn-item"
-                    style={{width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: link ? 'pointer' : 'default', padding: 0}}
-                    onClick={() => {
-                      if (link) {
-                        window.open(link, '_blank', 'noopener,noreferrer');
-                      }
-                    }}
-                  >
-                    <div className="notify-title" style={{fontWeight: 600, fontSize: 18, color: '#6d28d9', marginBottom: 4}}>{notify.title}</div>
-                    <div className="notify-content" style={{fontSize: 15, marginBottom: 6}} dangerouslySetInnerHTML={{__html: notify.content.replace(/(https?:\/\/[^\s]+)/g, '<a href=\"$1\" target=\"_blank\" rel=\"noopener noreferrer\" style=\"color:#e11d48;text-decoration:underline\">$1</a>')}} />
-                    <div className="notify-date" style={{fontSize: 13, color: '#888'}}>{dateStr}</div>
-                  </button>
-                </div>
-              );
-            })
+            Array.isArray(notifications) && notifications
+              .sort((a, b) => {
+                const dateA = a.createdAt ? new Date(a.createdAt).getTime() : (a.date && a.date.seconds ? a.date.seconds * 1000 : 0);
+                const dateB = b.createdAt ? new Date(b.createdAt).getTime() : (b.date && b.date.seconds ? b.date.seconds * 1000 : 0);
+                return dateB - dateA;
+              })
+              .map((notify: any, idx: number) => {
+                const link = notify.link || extractFirstLink(notify.content);
+                let dateStr = '';
+                if (notify.createdAt) {
+                  const d = new Date(notify.createdAt);
+                  dateStr = isNaN(d.getTime()) ? '' : d.toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' });
+                } else if (notify.date && typeof notify.date === 'object' && (notify.date.seconds || notify.date._seconds)) {
+                  const sec = notify.date.seconds || notify.date._seconds;
+                  dateStr = new Date(sec * 1000).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' });
+                } else if (notify.date) {
+                  const d = new Date(notify.date);
+                  dateStr = isNaN(d.getTime()) ? '' : d.toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' });
+                }
+                return (
+                  <div key={notify._id || idx} className="notify-item" style={{position: 'relative', minWidth: 220, margin: '8px', borderRadius: '16px', boxShadow: '0 2px 8px #eee', background: '#fff', padding: '18px 18px 12px 18px'}}>
+                    <button
+                      className="notify-delete-btn"
+                      title="Xóa thông báo"
+                      style={{position: 'absolute', top: 8, right: 12, background: 'none', border: 'none', color: '#e11d48', fontWeight: 'bold', fontSize: 14, cursor: 'pointer', zIndex: 2}}
+                      onClick={() => handleDeleteNotify(notifications.findIndex((n:any) => (n._id || n.id) === (notify._id || notify.id)))}
+                    >
+                      ✖
+                    </button>
+                    <button
+                      className="notify-btn-item"
+                      style={{width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: link ? 'pointer' : 'default', padding: 0}}
+                      onClick={() => {
+                        if (link) {
+                          window.open(link, '_blank', 'noopener,noreferrer');
+                        }
+                      }}
+                    >
+                      <div className="notify-title" style={{fontWeight: 600, fontSize: 18, color: '#6d28d9', marginBottom: 4}}>{notify.title}</div>
+                      <div className="notify-content" style={{fontSize: 15, marginBottom: 6}} dangerouslySetInnerHTML={{__html: notify.content.replace(/(https?:\/\/[^\s]+)/g, '<a href=\"$1\" target=\"_blank\" rel=\"noopener noreferrer\" style=\"color:#e11d48;text-decoration:underline\">$1</a>')}} />
+                      <div className="notify-date" style={{fontSize: 13, color: '#888'}}>{dateStr}</div>
+                    </button>
+                  </div>
+                );
+              })
           )}
         </div>
       </section>

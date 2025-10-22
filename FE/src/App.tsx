@@ -10,6 +10,7 @@ import Chat from './pages/Chat'
 import Entertainment from './pages/Entertainment'
 import HomeE from'./pages/Entertainment/HomeE'
 import Trangchu from './components/trangchu/Trangchu';
+import Profileuser from './pages/Profileuser';
 
 const App: React.FC = () => {
 
@@ -17,7 +18,6 @@ const App: React.FC = () => {
     <BrowserRouter>
       <Routes>
         <Route path='/' element={<LoginPage />} />
-        {/* <Route path="/" element={<Navigate to="/entertainment/home" replace />} /> */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/login/success" element={<LoginSuccess />} />
         <Route path="/home" element={<Home />} />
@@ -27,6 +27,7 @@ const App: React.FC = () => {
         <Route path="/entertainment" element={<Entertainment />} />
         <Route path="/entertainment/home" element={<HomeE />} />
         <Route path="/trangchu/Trangchu" element={<Trangchu />} />
+        <Route path="/profile" element={<Profileuser />} />
       </Routes>
     </BrowserRouter>
   )

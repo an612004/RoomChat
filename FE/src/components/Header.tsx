@@ -14,6 +14,11 @@ const Header: React.FC = () => {
   const [showNotify, setShowNotify] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [hasUnread, setHasUnread] = useState(false);
+  const unreadCount = notifications.filter((n:any) => {
+    const readBy = Array.isArray(n.readBy) ? n.readBy : [];
+  const uid = user?.email ?? null;
+    return !readBy.includes(uid);
+  }).length;
 
   // Lấy thông báo từ Firestore
   const fetchNotifications = async () => {
@@ -102,9 +107,37 @@ const Header: React.FC = () => {
           {isLoggedIn && user ? (
             <>
               {/* Notification Bell */}
-              <button className="action-btn notification-btn" title="Thông báo" onClick={() => setShowNotify(v => !v)}>
+              <button
+                className="action-btn notification-btn"
+                title="Thông báo"
+                onClick={async () => {
+                  // when opening (showing) popup, mark unread as read on server
+                  const willOpen = !showNotify;
+                  if (willOpen) {
+                    const uid = user?.email ?? null;
+                    const unreadIds = notifications.filter((n:any) => { const readBy = Array.isArray(n.readBy) ? n.readBy : []; return !readBy.includes(uid); }).map((n:any) => n._id || n.id).filter(Boolean);
+                    if (unreadIds.length > 0 && uid) {
+                      try {
+                        await fetch('http://localhost:3000/auth/notifications/mark-read', {
+                          method: 'PATCH',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ ids: unreadIds, userId: uid })
+                        });
+                      } catch (err) {
+                        // ignore
+                      }
+                      // refresh
+                      fetchNotifications();
+                    }
+                    setHasUnread(false);
+                  }
+                  setShowNotify(v => !v);
+                }}
+              >
                 <Bell size={18} />
-                {hasUnread && <span className="notify-dot"></span>}
+                {unreadCount > 0 ? (
+                  <span className="notification-badge">{unreadCount}</span>
+                ) : null}
               </button>
               {/* Notification Popup */}
               {showNotify && (
@@ -117,41 +150,51 @@ const Header: React.FC = () => {
                     {notifications.length === 0 ? (
                       <div className="text-gray-500 p-3">Không có thông báo nào !</div>
                     ) : (
-                      notifications.slice(0, 5).map((notify: any, idx: number) => {
-  const link = notify.link || (notify.content.match(/(https?:\/\/[^\s]+)/)?.[1] ?? null);
-  // Format Firestore timestamp to readable string
-  let dateStr = '';
-  if (notify.date && typeof notify.date === 'object' && (notify.date.seconds || notify.date._seconds)) {
-    const sec = notify.date.seconds || notify.date._seconds;
-    dateStr = new Date(sec * 1000).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' });
-  } else if (notify.date) {
-    const d = new Date(notify.date);
-    dateStr = isNaN(d.getTime()) ? '' : d.toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' });
-  }
-  return (
-    <div key={idx} className="notify-popup-item" style={{borderRadius:16, boxShadow:'0 2px 8px #e0e7ff', background:'#fff', margin:'10px 0', padding:'16px 18px 14px 18px', position:'relative', textAlign:'left', minWidth:220, maxWidth:340}}>
-      <div className="notify-popup-title" style={{fontWeight:600, fontSize:17, color:'#6d28d9', marginBottom:4}}>{notify.title}</div>
-      <div className="notify-popup-content" style={{fontSize:15, marginBottom:14, lineHeight:1.6}} dangerouslySetInnerHTML={{__html: notify.content.replace(/(https?:\/\/[^\s]+)/g, '<a href=\"$1\" target=\"_blank\" rel=\"noopener noreferrer\" style=\"color:#e11d48;text-decoration:underline\">$1</a>')}} />
-      <div className="notify-popup-date" style={{fontSize:13, color:'#888', marginTop:10}}>{dateStr}</div>
-      {link && (
-        <button
-          className="notify-link-btn"
-          style={{position:'absolute', top:12, right:18, background:'linear-gradient(90deg,#a78bfa,#f472b6)', color:'#fff', border:'none', borderRadius:8, padding:'4px 12px', fontWeight:500, fontSize:13, cursor:'pointer', boxShadow:'0 1px 4px #e0e7ff'}}
-          onClick={() => window.open(link, '_blank', 'noopener,noreferrer')}
-        >
-          Xem Ngay !
-        </button>
-      )}
-    </div>
-  );
-})
+                      notifications
+                        .sort((a, b) => {
+                          // Ưu tiên sort theo createdAt (MongoDB), fallback sang date (Firestore)
+                          const dateA = a.createdAt ? new Date(a.createdAt).getTime() : (a.date && a.date.seconds ? a.date.seconds * 1000 : 0);
+                          const dateB = b.createdAt ? new Date(b.createdAt).getTime() : (b.date && b.date.seconds ? b.date.seconds * 1000 : 0);
+                          return dateB - dateA;
+                        })
+                        .slice(0, 5)
+                        .map((notify: any, idx: number) => {
+                          const link = notify.link || (notify.content.match(/(https?:\/\/[^\s]+)/)?.[1] ?? null);
+                          let dateStr = '';
+                          if (notify.createdAt) {
+                            const d = new Date(notify.createdAt);
+                            dateStr = isNaN(d.getTime()) ? '' : d.toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' });
+                          } else if (notify.date && typeof notify.date === 'object' && (notify.date.seconds || notify.date._seconds)) {
+                            const sec = notify.date.seconds || notify.date._seconds;
+                            dateStr = new Date(sec * 1000).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' });
+                          } else if (notify.date) {
+                            const d = new Date(notify.date);
+                            dateStr = isNaN(d.getTime()) ? '' : d.toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' });
+                          }
+                          return (
+                            <div key={idx} className="notify-popup-item" style={{borderRadius:16, boxShadow:'0 2px 8px #e0e7ff', background:'#fff', margin:'10px 0', padding:'16px 18px 14px 18px', position:'relative', textAlign:'left', minWidth:220, maxWidth:340}}>
+                              <div className="notify-popup-title" style={{fontWeight:600, fontSize:17, color:'#6d28d9', marginBottom:4}}>{notify.title}</div>
+                              <div className="notify-popup-content" style={{fontSize:15, marginBottom:14, lineHeight:1.6}} dangerouslySetInnerHTML={{__html: notify.content.replace(/(https?:\/\/[^\s]+)/g, '<a href=\"$1\" target=\"_blank\" rel=\"noopener noreferrer\" style=\"color:#e11d48;text-decoration:underline\">$1</a>')}} />
+                              <div className="notify-popup-date" style={{fontSize:13, color:'#888', marginTop:10}}>{dateStr}</div>
+                              {link && (
+                                <button
+                                  className="notify-link-btn"
+                                  style={{position:'absolute', top:12, right:18, background:'linear-gradient(90deg,#a78bfa,#f472b6)', color:'#fff', border:'none', borderRadius:8, padding:'4px 12px', fontWeight:500, fontSize:13, cursor:'pointer', boxShadow:'0 1px 4px #e0e7ff'}}
+                                  onClick={() => window.open(link, '_blank', 'noopener,noreferrer')}
+                                >
+                                  Xem Ngay !
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })
                     )}
                   </div>
                 </div>
               )}
               
               {/* User Profile */}
-              <div className="user-profile">
+              <div onClick={() => navigate('/profile')} className="user-profile">
                 <div className="user-avatar">
                   <img 
                     src={user.avatar} 

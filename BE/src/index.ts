@@ -1,3 +1,4 @@
+import postRoutes from './routes/post';
 import * as dotenv from 'dotenv';
 dotenv.config();
 
@@ -6,7 +7,7 @@ import cors from 'cors';
 import session from 'express-session';
 import { db } from './config/firebaseConfig';
 import authRoutes from './routes/auth';
-
+import { connectDB } from './config/db';
 // Initialize Firebase config
 console.log('🔄 Checking Firebase connection...');
 try {
@@ -14,7 +15,7 @@ try {
 } catch (error) {
   console.log('Firebase connection error:', error instanceof Error ? error.message : 'Unknown error');
 }
-
+connectDB();
 const app: Application = express();
 const PORT: number = parseInt(process.env.PORT || '3000', 10);
 
@@ -35,7 +36,13 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Routes
+
+import uploadRoutes from './routes/upload';
+import path from 'path';
 app.use('/auth', authRoutes);
+app.use('/post', postRoutes);
+app.use('/upload', uploadRoutes);
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // Test endpoint
 app.get('/', (req: Request, res: Response) => {

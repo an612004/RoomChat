@@ -1,7 +1,30 @@
+.plusN-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(30, 30, 30, 0.65);
+  color: #fff;
+  font-size: 2.5rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.2s;
+  z-index: 2;
+}
+.plusN-overlay:hover {
+  background: rgba(30, 30, 30, 0.85);
+  transform: scale(1.04);
+  box-shadow: 0 0 12px #0005;
+}
 /* --- Container chính --- */
 .container {
   width: 80%;
-  margin: -30px auto 0 auto; /* Kéo phần này lên 30px */
+  margin: -500px auto 0 auto; /* Kéo phần này lên 5px */
   padding: 80px 20px;
   max-width: 990px;
   background-color: #f9f9f9;
@@ -12,7 +35,7 @@
 /* --- Container phụ bên dưới --- */
 .container1 {
   width: 80%;
-  margin: -80px auto 0 auto;
+  margin: -100px auto 0 auto;
   padding: 80px 20px;
   max-width: 990px;
   background-color: #f9f9f9;
@@ -42,10 +65,65 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   width: 100%;
   max-width: 600px;
-  margin: -30px auto 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  margin: -50px auto 0 auto;
+  display: block;
+}
+
+.post-item {
+  width: 100% !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  display: block !important;
+  box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 24px;
+  box-shadow: 0 6px 32px #b6b8c355;
+  transition: box-shadow 0.2s, transform 0.2s;
+  border: 1.5px solid #e0e7ff;
+  padding: 32px 28px 24px 28px;
+}
+.post-item:hover {
+  box-shadow: 0 12px 48px #6366f1aa;
+  transform: translateY(-2px) scale(1.01);
+}
+
+.post-item img,
+.post-item video {
+  border-radius: 18px;
+  box-shadow: 0 4px 24px #6366f1aa;
+  transition: box-shadow 0.2s, transform 0.2s;
+  width: 100%;
+  max-width: 1080px;
+  height: 1080px;
+  aspect-ratio: 1/1;
+  object-fit: contain;
+  margin: 0 auto;
+  display: block;
+  background: #fff;
+}
+.post-item img:hover,
+.post-item video:hover {
+  box-shadow: 0 8px 32px #ec4899cc;
+  transform: scale(1.03);
+}
+
+.post-actions-btn {
+  background: linear-gradient(90deg, #6366f1, #ec4899);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 6px 22px;
+  font-weight: 700;
+  font-size: 17px;
+  box-shadow: 0 2px 8px #e0e7ff;
+  cursor: pointer;
+  margin-right: 10px;
+  transition: background 0.2s, box-shadow 0.2s, transform 0.2s;
+}
+.post-actions-btn:hover {
+  background: linear-gradient(90deg, #7c3aed, #f472b6);
+  box-shadow: 0 4px 16px #c4b5fd;
+  transform: scale(1.05);
 }
 
 /* --- Nút "Bạn đang nghĩ gì thế?" --- */
@@ -304,6 +382,18 @@
   width: 24px;
   height: 24px;
   filter: brightness(1.15) drop-shadow(0 1px 2px #fff2);
+}
+/* Ensure header avatar inside post header is not centered and stays at left */
+.post-header {
+  width: 100%;
+}
+.post-header .post-header-avatar {
+  display: inline-block;
+  margin: 0;
+  vertical-align: middle;
+}
+.post-header + .post-content {
+  margin-top: 8px;
 }
 /* Force style application for modal */
 .post-modal,
