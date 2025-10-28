@@ -1,4 +1,4 @@
-import React from 'react'
+// React import not required with the new JSX transform
 import Menu from '../components/entertainment/Menu'  
 import Header from '../components/Header'
 

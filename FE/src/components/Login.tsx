@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Github, Mail, Facebook, Chrome } from 'lucide-react';
+import { Github, Mail, Facebook } from 'lucide-react';
 import githubAuthService from '../services/githubAuth';
 import facebookAuthService from '../services/facebookAuth';
 import googleAuthService from '../services/googleAuth';
@@ -26,16 +26,18 @@ const Login: React.FC = () => {
       const result = await facebookAuthService.handleRedirectResult();
       if (result && result.success) {
         console.log('Facebook login success from redirect:', result.user);
+        try { window.dispatchEvent(new Event('show-splash')) } catch (e) { }
+        sessionStorage.setItem('showSplash', '1')
         navigate('/home');
       }
     };
-    
+
     handleFacebookRedirect();
   }, [navigate]);
 
   const handleSendCode = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
-    
+
     if (!email) {
       alert('Vui lòng nhập địa chỉ Gmail!');
       return;
@@ -47,10 +49,10 @@ const Login: React.FC = () => {
     }
 
     setLoadingStates(prev => ({ ...prev, email: true }));
-    
+
     try {
       const result = await emailOTPService.sendOTP(email);
-      
+
       if (result.success && result.sessionToken) {
         setSessionToken(result.sessionToken);
         setShowOTPVerification(true);
@@ -78,19 +80,21 @@ const Login: React.FC = () => {
   const handleFacebookLogin = async (): Promise<void> => {
     try {
       setLoadingStates(prev => ({ ...prev, facebook: true }));
-      
+
       // Thử popup trước, nếu không được thì dùng redirect
       const result = await facebookAuthService.loginWithPopup();
-      
+
       if (result.success) {
         console.log('✅ Facebook login successful:', result.user);
+        try { window.dispatchEvent(new Event('show-splash')) } catch (e) { }
+        sessionStorage.setItem('showSplash', '1')
         navigate('/home');
       } else {
         // Nếu popup fail, thử redirect
         console.log('Popup failed, trying redirect...');
         await facebookAuthService.loginWithRedirect();
       }
-      
+
     } catch (error: any) {
       console.error('❌ Facebook login error:', error);
       alert('Facebook login failed. Please try again.');
@@ -102,16 +106,18 @@ const Login: React.FC = () => {
   const handleGoogleLogin = async (): Promise<void> => {
     try {
       setIsGoogleLoading(true);
-      
+
       const result = await googleAuthService.loginWithGoogle();
-      
+
       if (result.success) {
         console.log('✅ Google login successful:', result.user);
+        try { window.dispatchEvent(new Event('show-splash')) } catch (e) { }
+        sessionStorage.setItem('showSplash', '1')
         navigate('/home');
       } else {
         alert(result.error || 'Google login failed. Please try again.');
       }
-      
+
     } catch (error: any) {
       console.error('❌ Google login error:', error);
       alert('Google login failed. Please try again.');
@@ -123,6 +129,8 @@ const Login: React.FC = () => {
   const handleOTPSuccess = (user: any, token: string): void => {
     localStorage.setItem('authToken', token);
     localStorage.setItem('user', JSON.stringify(user));
+    try { window.dispatchEvent(new Event('show-splash')) } catch (e) { }
+    sessionStorage.setItem('showSplash', '1')
     navigate('/home');
   };
 
@@ -134,10 +142,13 @@ const Login: React.FC = () => {
   // Show OTP Verification if email OTP was sent
   if (showOTPVerification) {
     return (
-      <div className='container'>
-        <h1>Welcome to Anbi</h1>
-        <div className="login-container">
-          <div className="login-card">
+      <div className="flex flex-col justify-center items-center h-screen bg-gradient-to-r from-blue-50 to-pink-50 pt-20">
+        <div style={{ marginTop: '30px' }}>
+          <h1 className="text-3xl font-bold mb-6 text-gray-800">Welcome to Anbi</h1>
+        </div>
+
+        <div className="login-container flex justify-center items-center">
+          <div className="login-card shadow-lg p-6 bg-white rounded-2xl">
             <OTPVerification
               email={email}
               sessionToken={sessionToken}
@@ -147,6 +158,7 @@ const Login: React.FC = () => {
           </div>
         </div>
       </div>
+
     );
   }
 
@@ -202,7 +214,7 @@ const Login: React.FC = () => {
           {/* Social Login Cards */}
           <div className="social-methods">
             {/* GitHub */}
-            <button 
+            <button
               className={`social-card github ${loadingStates.github ? 'loading' : ''}`}
               onClick={handleGithubAuth}
               disabled={loadingStates.github}

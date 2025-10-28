@@ -8,6 +8,7 @@ const axios_1 = __importDefault(require("axios"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const firebaseConfig_1 = require("../config/firebaseConfig");
 const firebase_admin_1 = __importDefault(require("firebase-admin"));
+const emailService_1 = __importDefault(require("../services/emailService"));
 const router = express_1.default.Router();
 // Step 1: Redirect to GitHub OAuth
 router.get('/github', (req, res) => {
@@ -292,6 +293,258 @@ router.post('/firebase-auth', async (req, res) => {
             success: false,
             message: 'Firebase authentication failed'
         });
+    }
+});
+const otpSessions = new Map();
+// Generate random OTP
+const generateOTP = () => {
+    return Math.floor(100000 + Math.random() * 900000).toString();
+};
+// Generate session token
+const generateSessionToken = () => {
+    return Math.random().toString(36).substring(2) + Date.now().toString(36);
+};
+// Send OTP endpoint
+router.post('/send-otp', async (req, res) => {
+    try {
+        const { email } = req.body;
+        if (!email) {
+            res.status(400).json({
+                success: false,
+                message: 'Email is required'
+            });
+            return;
+        }
+        // Validate Gmail
+        const gmailPattern = /^[a-zA-Z0-9._%+-]+@gmail\.com$/;
+        if (!gmailPattern.test(email)) {
+            res.status(400).json({
+                success: false,
+                message: 'Please provide a valid Gmail address'
+            });
+            return;
+        }
+        // Generate OTP and session token
+        const otpCode = generateOTP();
+        const sessionToken = generateSessionToken();
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+        // Store OTP session
+        otpSessions.set(sessionToken, {
+            email,
+            otpCode,
+            expiresAt,
+            attempts: 0
+        });
+        // Send OTP via email
+        let emailSent = false;
+        if (process.env.NODE_ENV === 'production' || process.env.GMAIL_USER) {
+            emailSent = await emailService_1.default.sendOTPEmail(email, otpCode);
+            if (!emailSent) {
+                console.log('⚠️ Email sending failed, falling back to console log');
+            }
+        }
+        // For development or fallback, also log the OTP
+        if (!emailSent || process.env.NODE_ENV === 'development') {
+            console.log(`🔐 OTP for ${email}: ${otpCode}`);
+            console.log(`📧 Session Token: ${sessionToken}`);
+        }
+        res.json({
+            success: true,
+            message: emailSent ?
+                `Mã OTP đã được gửi đến ${email}. Vui lòng kiểm tra hộp thư của bạn.` :
+                `Mã OTP đã được tạo cho ${email}`,
+            sessionToken,
+            // Remove this in production
+            otpCode: process.env.NODE_ENV === 'development' ? otpCode : undefined
+        });
+    }
+    catch (error) {
+        console.error('Send OTP error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to send OTP'
+        });
+    }
+});
+// Verify OTP endpoint
+router.post('/verify-otp', async (req, res) => {
+    try {
+        const { email, otpCode, sessionToken } = req.body;
+        if (!email || !otpCode || !sessionToken) {
+            res.status(400).json({
+                success: false,
+                message: 'Email, OTP code, and session token are required'
+            });
+            return;
+        }
+        // Get OTP session
+        const session = otpSessions.get(sessionToken);
+        if (!session) {
+            res.status(400).json({
+                success: false,
+                message: 'Invalid or expired session'
+            });
+            return;
+        }
+        // Check expiration
+        if (new Date() > session.expiresAt) {
+            otpSessions.delete(sessionToken);
+            res.status(400).json({
+                success: false,
+                message: 'OTP has expired'
+            });
+            return;
+        }
+        // Check email match
+        if (session.email !== email) {
+            res.status(400).json({
+                success: false,
+                message: 'Email mismatch'
+            });
+            return;
+        }
+        // Check attempts limit
+        if (session.attempts >= 3) {
+            otpSessions.delete(sessionToken);
+            res.status(400).json({
+                success: false,
+                message: 'Too many failed attempts'
+            });
+            return;
+        }
+        // Verify OTP
+        if (session.otpCode !== otpCode) {
+            session.attempts++;
+            res.status(400).json({
+                success: false,
+                message: 'Invalid OTP code'
+            });
+            return;
+        }
+        // OTP verified successfully, clean up session
+        otpSessions.delete(sessionToken);
+        // Check if user exists in Firestore
+        let userData;
+        const usersRef = firebaseConfig_1.db.collection('users');
+        const existingUser = await usersRef.where('email', '==', email).get();
+        if (existingUser.empty) {
+            // Create new user
+            const newUserData = {
+                email: email,
+                name: email.split('@')[0], // Use email prefix as name
+                avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(email)}&background=random`,
+                provider: 'email',
+                createdAt: firebase_admin_1.default.firestore.FieldValue.serverTimestamp(),
+                lastLoginAt: firebase_admin_1.default.firestore.FieldValue.serverTimestamp()
+            };
+            const newUserRef = await usersRef.add(newUserData);
+            userData = { id: newUserRef.id, ...newUserData };
+            console.log('✅ New user created:', userData);
+        }
+        else {
+            // Update existing user
+            const userDoc = existingUser.docs[0];
+            const userRef = userDoc.ref;
+            await userRef.update({
+                lastLoginAt: firebase_admin_1.default.firestore.FieldValue.serverTimestamp()
+            });
+            userData = { id: userDoc.id, ...userDoc.data() };
+            console.log('✅ Existing user logged in:', userData);
+        }
+        // Save login history
+        await firebaseConfig_1.db.collection('loginHistory').add({
+            userId: userData.id,
+            provider: 'email',
+            loginTime: firebase_admin_1.default.firestore.FieldValue.serverTimestamp(),
+            ip: req.ip || req.connection.remoteAddress || 'unknown'
+        });
+        // Generate app token
+        const appToken = jsonwebtoken_1.default.sign({
+            userId: userData.id,
+            email: email,
+            provider: 'email'
+        }, process.env.JWT_SECRET || 'fallback_secret', { expiresIn: '7d' });
+        res.json({
+            success: true,
+            message: 'OTP verified successfully',
+            user: userData,
+            token: appToken
+        });
+    }
+    catch (error) {
+        console.error('Verify OTP error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to verify OTP'
+        });
+    }
+});
+// Notification model
+const Notification_1 = __importDefault(require("../models/Notification"));
+// Tạo thông báo (admin)
+router.post('/notifications', async (req, res) => {
+    try {
+        const { title, content, link, userId } = req.body;
+        if (!title || !content) {
+            return res.status(400).json({ success: false, message: 'Thiếu tiêu đề hoặc nội dung' });
+        }
+        const notify = new Notification_1.default({
+            title,
+            content,
+            link: link || '',
+            userId: userId || null,
+        });
+        await notify.save();
+        return res.json({ success: true, id: notify._id });
+    }
+    catch (err) {
+        return res.status(500).json({ success: false, message: 'Lỗi khi lưu thông báo' });
+    }
+});
+// Lấy tất cả thông báo
+router.get('/notifications', async (req, res) => {
+    try {
+        const notifications = await Notification_1.default.find().sort({ createdAt: -1 });
+        res.json({ success: true, notifications });
+    }
+    catch (err) {
+        res.status(500).json({ success: false, message: 'Lỗi khi lấy thông báo' });
+    }
+});
+// Xóa thông báo (admin)
+router.delete('/notifications/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        if (!id) {
+            return res.status(400).json({ success: false, message: 'Thiếu id thông báo' });
+        }
+        await Notification_1.default.findByIdAndDelete(id);
+        return res.json({ success: true });
+    }
+    catch (err) {
+        return res.status(500).json({ success: false, message: 'Lỗi khi xóa thông báo' });
+    }
+});
+// Đánh dấu thông báo đã đọc cho 1 user (thêm userId vào readBy)
+router.patch('/notifications/mark-read', async (req, res) => {
+    try {
+        const { ids, markAll, userId } = req.body;
+        if (!userId)
+            return res.status(400).json({ success: false, message: 'Thiếu userId' });
+        if (markAll) {
+            // add userId to readBy for all notifications (no duplicates)
+            await Notification_1.default.updateMany({}, { $addToSet: { readBy: userId } });
+            return res.json({ success: true });
+        }
+        if (!Array.isArray(ids) || ids.length === 0) {
+            return res.status(400).json({ success: false, message: 'Thiếu ids hoặc markAll' });
+        }
+        await Notification_1.default.updateMany({ _id: { $in: ids } }, { $addToSet: { readBy: userId } });
+        return res.json({ success: true });
+    }
+    catch (err) {
+        console.error('Mark read error', err);
+        return res.status(500).json({ success: false, message: 'Lỗi khi cập nhật trạng thái đọc' });
     }
 });
 exports.default = router;

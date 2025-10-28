@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import './HeaderNotify.css';
 import useAuth from '../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
@@ -227,10 +228,10 @@ const Header: React.FC = () => {
         </div>
       </div>
 
-      {/* Logout Confirmation Modal */}
-      {showConfirm && (
-        <div className="logout-modal-overlay">
-          <div className="logout-modal">
+      {/* Logout Confirmation Modal (portal) */}
+      {showConfirm && createPortal(
+        <div className="logout-modal-overlay" onClick={() => setShowConfirm(false)}>
+          <div className="logout-modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true">
             <div className="logout-modal-header">
               <h3>Confirm logout</h3>
             </div>
@@ -258,7 +259,8 @@ const Header: React.FC = () => {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </header>
   );

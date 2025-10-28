@@ -23,24 +23,28 @@
 }
 /* --- Container chính --- */
 .container {
-  width: 80%;
-  margin: -500px auto 0 auto; /* Kéo phần này lên 5px */
-  padding: 80px 20px;
+  width: 100%;
+  margin: 24px auto 0 auto; /* reset negative margin to avoid layout overflow */
+  padding: 24px 12px;
   max-width: 990px;
   background-color: #f9f9f9;
   display: flex;
   justify-content: center;
+  box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 /* --- Container phụ bên dưới --- */
 .container1 {
-  width: 80%;
-  margin: -100px auto 0 auto;
-  padding: 80px 20px;
+  width: 100%;
+  margin: 16px auto 0 auto;
+  padding: 24px 12px;
   max-width: 990px;
   background-color: #f9f9f9;
   display: flex;
   justify-content: center;
+  box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 /* --- Container của form đăng bài popup --- */
@@ -65,8 +69,10 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   width: 100%;
   max-width: 600px;
-  margin: -50px auto 0 auto;
+  margin: 0 auto 16px auto;
   display: block;
+  box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 .post-item {
@@ -81,6 +87,7 @@
   transition: box-shadow 0.2s, transform 0.2s;
   border: 1.5px solid #e0e7ff;
   padding: 32px 28px 24px 28px;
+  overflow-x: hidden;
 }
 .post-item:hover {
   box-shadow: 0 12px 48px #6366f1aa;
@@ -93,10 +100,10 @@
   box-shadow: 0 4px 24px #6366f1aa;
   transition: box-shadow 0.2s, transform 0.2s;
   width: 100%;
-  max-width: 1080px;
-  height: 1080px;
-  aspect-ratio: 1/1;
-  object-fit: contain;
+  max-width: 100%;
+  height: auto; /* allow intrinsic height and avoid forcing huge fixed height */
+  max-height: 80vh; /* keep images/videos within viewport */
+  object-fit: cover;
   margin: 0 auto;
   display: block;
   background: #fff;
@@ -461,3 +468,91 @@
     padding-right: 12px;
   }
 }
+
+  /* ==========================
+     Responsive adjustments
+     ========================== */
+  @media (max-width: 1024px) {
+    .container,
+    .container1 {
+      max-width: 720px;
+      padding: 16px;
+      margin: 16px auto 0 auto;
+    }
+
+    .post-item {
+      padding: 20px;
+    }
+
+    .post-item img,
+    .post-item video {
+      max-height: 60vh;
+    }
+
+    .post-box {
+      max-width: 95%;
+    }
+  }
+
+  @media (max-width: 768px) {
+    /* Make feed single-column and reduce spacing */
+    .container,
+    .container1 {
+      max-width: 100%;
+      margin: 8px;
+      padding: 12px;
+    }
+
+    .post-item {
+      padding: 16px;
+      border-radius: 12px;
+    }
+
+    .post-item img,
+    .post-item video {
+      max-height: 50vh;
+    }
+
+    /* Align avatar and header content neatly on small screens */
+    .post-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .post-header .post-header-avatar {
+      margin: 0;
+      flex-shrink: 0;
+    }
+
+    /* Modal sizing on small devices */
+    .post-modal {
+      max-width: 98vw;
+      padding: 8px;
+      border-radius: 10px;
+    }
+
+    .post-modal-content {
+      padding: 12px;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .post-item {
+      padding: 12px;
+    }
+
+    .post-item img,
+    .post-item video {
+      max-height: 40vh;
+    }
+
+    .thought-btn {
+      font-size: 14px;
+      padding: 10px;
+    }
+
+    .plusN-overlay {
+      font-size: 1.6rem;
+    }
+  }

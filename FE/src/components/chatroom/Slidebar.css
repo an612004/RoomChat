@@ -104,9 +104,9 @@
 
 @media (max-width: 480px) {
   .sidebar-main-responsive {
-    width: 100vw !important;
+    width: 100% !important;
     min-width: 0;
-    max-width: 100vw;
+    max-width: 100%;
     left: 0;
     top: 0;
     border-radius: 0;

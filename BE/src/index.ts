@@ -1,77 +1,114 @@
-import postRoutes from './routes/post';
 import * as dotenv from 'dotenv';
 dotenv.config();
 
 import express, { Request, Response, NextFunction, Application } from 'express';
 import cors from 'cors';
 import session from 'express-session';
-import { db } from './config/firebaseConfig';
+import path from 'path';
+
+// 🧩 Import routes
 import authRoutes from './routes/auth';
+import postRoutes from './routes/post';
+import uploadRoutes from './routes/upload';
+import mediaRoutes from './routes/media';
+import healthRoutes from './routes/health';
+
+// 🧩 Import configs
 import { connectDB } from './config/db';
-// Initialize Firebase config
+import { db } from './config/firebaseConfig';
+
+// 🧩 Kiểm tra Firebase config
 console.log('🔄 Checking Firebase connection...');
 try {
-  console.log('Firebase config loaded');
+  console.log('✅ Firebase config loaded');
 } catch (error) {
-  console.log('Firebase connection error:', error instanceof Error ? error.message : 'Unknown error');
+  console.log('❌ Firebase connection error:', error instanceof Error ? error.message : 'Unknown error');
 }
+
+// 🧩 Kiểm tra Cloudinary cấu hình
+if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+  console.warn(
+    '⚠️ Cloudinary not fully configured. Please set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET in your .env file.'
+  );
+} else {
+  console.log('✅ Cloudinary configuration detected');
+}
+
+// 🧩 Kết nối MongoDB
 connectDB();
+
+// 🧩 Khởi tạo app Express
 const app: Application = express();
 const PORT: number = parseInt(process.env.PORT || '3000', 10);
 
-// Middleware
-app.use(cors({
-  origin: process.env.FRONTEND_URL || "http://localhost:5173",
-  credentials: true, 
-}));
+// 🧩 Middleware cấu hình CORS + session
+app.use(
+  cors({
+    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    credentials: true,
+  })
+);
 
-app.use(session({
-  secret: process.env.SESSION_SECRET || "supersecret", 
-  resave: false,
-  saveUninitialized: false,
-  cookie: { secure: process.env.NODE_ENV === 'production' } 
-}));
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || 'supersecret',
+    resave: false,
+    saveUninitialized: false,
+    cookie: { secure: process.env.NODE_ENV === 'production' },
+  })
+);
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Routes
-
-import uploadRoutes from './routes/upload';
-import path from 'path';
+// 🧩 Định tuyến
 app.use('/auth', authRoutes);
 app.use('/post', postRoutes);
 app.use('/upload', uploadRoutes);
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+app.use('/media', mediaRoutes);
+app.use('/health', healthRoutes);
 
-// Test endpoint
+// 🧩 Cho phép phục vụ file uploads cục bộ (nếu được bật)
+if (process.env.ALLOW_LOCAL_UPLOADS === 'true') {
+  app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+  console.log('📂 Local uploads static serving ENABLED (ALLOW_LOCAL_UPLOADS=true)');
+} else {
+  console.log('☁️ Local uploads static serving DISABLED (files served from Firebase/Cloudinary)');
+}
+
+// 🧩 Endpoint test nhanh
 app.get('/', (req: Request, res: Response) => {
-  res.json({ 
-    message: 'Backend server is running!',
-    timestamp: new Date().toISOString()
+  res.json({
+    message: '🚀 Backend server is running!',
+    timestamp: new Date().toISOString(),
   });
 });
 
-// Global error handler
+// 🧩 Global error handler
 app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
-  console.error('Global error:', err);
-  res.status(500).json({ 
+  console.error('🔥 Global error:', err);
+  res.status(500).json({
     error: 'Internal server error',
-    message: process.env.NODE_ENV === 'development' ? err.message : undefined
+    message: process.env.NODE_ENV === 'development' ? err.message : undefined,
   });
 });
 
-// 404 handler
+// 🧩 404 handler
 app.use('*', (req: Request, res: Response) => {
   res.status(404).json({ error: 'Route not found' });
 });
 
+// 🧩 Chạy server + verify email service
 app.listen(PORT, async () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-  console.log(`API Documentation available at http://localhost:${PORT}`);
-  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-  
-  // Verify email service connection
-  const { default: emailService } = await import('./services/emailService');
-  await emailService.verifyConnection();
+  console.log(`✅ Server running on http://localhost:${PORT}`);
+  console.log(`📘 API Documentation available at http://localhost:${PORT}`);
+  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+
+  try {
+    const { default: emailService } = await import('./services/emailService');
+    await emailService.verifyConnection();
+    console.log('✅ Email service connection verified');
+  } catch (error) {
+    console.error('❌ Email service verification failed:', error instanceof Error ? error.message : error);
+  }
 });

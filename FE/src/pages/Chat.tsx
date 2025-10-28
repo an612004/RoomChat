@@ -1,4 +1,4 @@
-import React from 'react'
+// React import not required with the new JSX transform
 import Slidebar from '../components/chatroom/Slidebar'
 // import ChatArea from '../components/chatroom/ChatArea'
 

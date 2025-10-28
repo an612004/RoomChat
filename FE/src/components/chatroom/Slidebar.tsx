@@ -2,7 +2,6 @@ import { useState } from "react";
 import "./Slidebar.css";
 import {
   Plus,
-  MessageCircle,
   ChevronRight,
   ChevronLeft,
   Users,
@@ -11,13 +10,15 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import useAuth from "../../hooks/useAuth";
-import Createroom from "./Createroom";
+// Createroom component is referenced in comments but currently unused
+// import Createroom from "./Createroom";
 
 export default function LeftSidebar() {
   const [open, setOpen] = useState(true);
   const [collapsed, setCollapsed] = useState(false);
   const [activeRoom, setActiveRoom] = useState(1);
-  const [showCreateForm, setShowCreateForm] = useState(true); // Test: modal should appear immediately
+  // create form state kept for future use (prefixed to avoid unused warning)
+  const [_showCreateForm, _setShowCreateForm] = useState(false);
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -31,17 +32,9 @@ export default function LeftSidebar() {
 
   const handleCreateRoom = () => {
     console.log("Create room button clicked!"); 
-    setShowCreateForm(true);
+    _setShowCreateForm(true);
   };
-
-  const handleSubmitRoom = (roomData: { name: string; description: string; inviteUsers?: string }) => {
-    // TODO: Add actual room creation logic here
-    console.log("Creating room:", roomData);
-  };
-
-  const handleCloseForm = () => {
-    setShowCreateForm(false);
-  };
+  // handlers reserved for future implementation (removed to avoid unused warnings)
 
   return (
   <div className="relative flex-shrink-0 sidebar-responsive">

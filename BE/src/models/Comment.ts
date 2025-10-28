@@ -7,16 +7,21 @@ export interface IComment extends Document {
   authorAvatar?: string;
   content: string;
   createdAt: Date;
+  images?: string[];
+  videos?: string[];
+  imagePublicIds?: string[];
+  videoPublicIds?: string[];
   replies?: Array<{
     authorId: string;
     authorName: string;
     authorAvatar?: string;
     content: string;
     emoji?: string;
-    image?: string;
+    images?: string[];
+    videos?: string[];
     createdAt?: Date;
   }>;
-  reactions?: { [emoji: string]: number };
+  reactions?: { heart?: string[] };
 }
 
 const CommentSchema: Schema = new Schema({
@@ -26,6 +31,10 @@ const CommentSchema: Schema = new Schema({
   authorAvatar: { type: String },
   content: { type: String, required: true },
   createdAt: { type: Date, default: Date.now },
+  images: { type: [String], default: [] },
+  videos: { type: [String], default: [] },
+  imagePublicIds: { type: [String], default: [] },
+  videoPublicIds: { type: [String], default: [] },
   replies: [
     {
       authorId: String,
@@ -33,7 +42,10 @@ const CommentSchema: Schema = new Schema({
       authorAvatar: String,
       content: String,
       emoji: String,
-      image: String,
+      images: { type: [String], default: [] },
+      videos: { type: [String], default: [] },
+      imagePublicIds: { type: [String], default: [] },
+      videoPublicIds: { type: [String], default: [] },
       createdAt: { type: Date, default: Date.now }
     }
   ],

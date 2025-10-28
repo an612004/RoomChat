@@ -68,8 +68,9 @@ body {
     #c7e9f1 100%
   ) !important;
   color: #333;
-  height: 100vh;
-  width: 97vw;
+  min-height: 100vh;
+  width: 100%;
+  overflow-x: hidden; /* prevent horizontal overflow */
 }
 /*Footer*/
 .footer {
@@ -87,7 +88,7 @@ body {
   z-index: 50;
 }
 .header {
-  width: 103%;
+  width: 100%;
   height: 80px;
   background: radial-gradient(circle 600px at 0% 200px, #d5c5ff, transparent),
     radial-gradient(circle 600px at 100% 200px, #d5c5ff, transparent);
@@ -1496,12 +1497,7 @@ body {
    =========================================== */
 .logout-modal-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  width: 100vw;
-  height: 100vh;
+  inset: 0; /* covers viewport without using 100vw/100vh to avoid overflow */
   background: rgba(0, 0, 0, 0.6);
   display: flex;
   align-items: center;

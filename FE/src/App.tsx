@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import LoginPage from './pages/LoginPage'
 import LoginSuccess from './components/LoginSuccess'
@@ -11,25 +11,49 @@ import Entertainment from './pages/Entertainment'
 import HomeE from'./pages/Entertainment/HomeE'
 import Trangchu from './components/trangchu/Trangchu';
 import Profileuser from './pages/Profileuser';
+import Splash from './components/Splash'
 
 const App: React.FC = () => {
+  const [splashVisible, setSplashVisible] = useState(false)
+
+  useEffect(() => {
+    // Show splash if a flag was set for full reload
+    const flag = sessionStorage.getItem('showSplash')
+    if (flag === '1') {
+      setSplashVisible(true)
+      // Clear the flag so subsequent navigations don't show it
+      sessionStorage.removeItem('showSplash')
+      setTimeout(() => setSplashVisible(false), 1200)
+    }
+
+    const handler = () => {
+      setSplashVisible(true)
+      setTimeout(() => setSplashVisible(false), 1200)
+    }
+
+    window.addEventListener('show-splash', handler as EventListener)
+    return () => window.removeEventListener('show-splash', handler as EventListener)
+  }, [])
 
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path='/' element={<LoginPage />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/login/success" element={<LoginSuccess />} />
-        <Route path="/home" element={<Home />} />
-        <Route path="/admin612004" element={<AdminPage />} />
-        <Route path="*" element={<Notfound />} />
-        <Route path="/chat" element={<Chat />} />
-        <Route path="/entertainment" element={<Entertainment />} />
-        <Route path="/entertainment/home" element={<HomeE />} />
-        <Route path="/trangchu/Trangchu" element={<Trangchu />} />
-        <Route path="/profile" element={<Profileuser />} />
-      </Routes>
-    </BrowserRouter>
+    <>
+      <Splash visible={splashVisible} />
+      <BrowserRouter>
+        <Routes>
+          <Route path='/' element={<LoginPage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/login/success" element={<LoginSuccess />} />
+          <Route path="/home" element={<Home />} />
+          <Route path="/admin612004" element={<AdminPage />} />
+          <Route path="*" element={<Notfound />} />
+          <Route path="/chat" element={<Chat />} />
+          <Route path="/entertainment" element={<Entertainment />} />
+          <Route path="/entertainment/home" element={<HomeE />} />
+          <Route path="/trangchu/Trangchu" element={<Trangchu />} />
+          <Route path="/profile" element={<Profileuser />} />
+        </Routes>
+      </BrowserRouter>
+    </>
   )
 }
 

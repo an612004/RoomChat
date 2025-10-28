@@ -1,4 +1,4 @@
-import React from 'react'
+// React import not required with the new JSX transform
 import Slider from '../../components/entertainment/home/Slider'
 import Menu from '../../components/entertainment/Menu'
 import Header from '../../components/Header'

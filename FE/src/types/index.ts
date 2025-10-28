@@ -7,6 +7,7 @@ export interface User {
   provider?: string;
   accessToken?: string;
   refreshToken?: string;
+  bio?: string;
 }
 
 // Firebase Auth Result

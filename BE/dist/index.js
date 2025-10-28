@@ -36,12 +36,14 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+const post_1 = __importDefault(require("./routes/post"));
 const dotenv = __importStar(require("dotenv"));
 dotenv.config();
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const express_session_1 = __importDefault(require("express-session"));
 const auth_1 = __importDefault(require("./routes/auth"));
+const db_1 = require("./config/db");
 // Initialize Firebase config
 console.log('🔄 Checking Firebase connection...');
 try {
@@ -50,6 +52,7 @@ try {
 catch (error) {
     console.log('Firebase connection error:', error instanceof Error ? error.message : 'Unknown error');
 }
+(0, db_1.connectDB)();
 const app = (0, express_1.default)();
 const PORT = parseInt(process.env.PORT || '3000', 10);
 // Middleware
@@ -66,7 +69,20 @@ app.use((0, express_session_1.default)({
 app.use(express_1.default.json());
 app.use(express_1.default.urlencoded({ extended: true }));
 // Routes
+const upload_1 = __importDefault(require("./routes/upload"));
+const path_1 = __importDefault(require("path"));
 app.use('/auth', auth_1.default);
+app.use('/post', post_1.default);
+app.use('/upload', upload_1.default);
+// Serve local uploads only when explicitly enabled. In production we store media in
+// Firebase Storage and should not serve the local uploads folder.
+if (process.env.ALLOW_LOCAL_UPLOADS === 'true') {
+    app.use('/uploads', express_1.default.static(path_1.default.join(__dirname, '../uploads')));
+    console.log('Local uploads static serving ENABLED (ALLOW_LOCAL_UPLOADS=true)');
+}
+else {
+    console.log('Local uploads static serving DISABLED (files served from Firebase Storage)');
+}
 // Test endpoint
 app.get('/', (req, res) => {
     res.json({
@@ -86,8 +102,11 @@ app.use((err, req, res, next) => {
 app.use('*', (req, res) => {
     res.status(404).json({ error: 'Route not found' });
 });
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
     console.log(`Server running on http://localhost:${PORT}`);
     console.log(`API Documentation available at http://localhost:${PORT}`);
     console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    // Verify email service connection
+    const { default: emailService } = await Promise.resolve().then(() => __importStar(require('./services/emailService')));
+    await emailService.verifyConnection();
 });
