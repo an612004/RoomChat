@@ -12,6 +12,7 @@ import postRoutes from './routes/post';
 import uploadRoutes from './routes/upload';
 import mediaRoutes from './routes/media';
 import healthRoutes from './routes/health';
+import userRoutes from './routes/user';
 
 // 🧩 Import configs
 import { connectDB } from './config/db';
@@ -67,6 +68,7 @@ app.use('/post', postRoutes);
 app.use('/upload', uploadRoutes);
 app.use('/media', mediaRoutes);
 app.use('/health', healthRoutes);
+app.use('/user', userRoutes);
 
 // 🧩 Cho phép phục vụ file uploads cục bộ (nếu được bật)
 if (process.env.ALLOW_LOCAL_UPLOADS === 'true') {

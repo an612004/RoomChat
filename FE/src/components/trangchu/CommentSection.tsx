@@ -23,6 +23,9 @@ const CommentSection: React.FC<CommentSectionProps> = ({
         {comments && (
           <span
             style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,                 // khoảng cách icon và số đẹp hơn
               fontWeight: 500,
               fontSize: 15,
               color: "#555",
@@ -30,12 +33,11 @@ const CommentSection: React.FC<CommentSectionProps> = ({
             }}
             onClick={onShowModal}
           >
-            <MessageCircle
-              size={22}
-              style={{ verticalAlign: "middle", marginRight: 4 }}
-            />
-            {getTotalComments(comments).toLocaleString("vi-VN")} bình luận
+            {/* <MessageCircle size={18} strokeWidth={1.3} /> */}
+            {getTotalComments(comments).toLocaleString("vi-VN")}
+            <MessageCircle size={18} strokeWidth={1.3} />
           </span>
+
         )}
       </div>
     </div>

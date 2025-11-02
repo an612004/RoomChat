@@ -1094,8 +1094,8 @@ body {
 /* Social Methods */
 .social-methods {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 12px;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
 }
 
 .social-card {
@@ -1132,16 +1132,6 @@ body {
 
 .social-card.google:hover:not(:disabled) {
   border-color: #4285f4;
-}
-
-.social-card.facebook {
-  border-color: #1877f2;
-  color: #1877f2;
-}
-
-.social-card.facebook:hover:not(:disabled) {
-  background: #1877f2;
-  color: white;
 }
 
 .dev-badge {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Tag, MapPin, Laugh, Heart, Share2 } from "lucide-react";
+import { Tag, MapPin, Laugh, Heart, Share2, MessageCircle } from "lucide-react";
 import CommentSection from "./CommentSection";
 import CommentModal from "./CommentModal";
 const EmojiPicker = React.lazy(() => import("./EmojiPicker"));
@@ -25,7 +25,8 @@ const Trangchu = () => {
   const emojiPickerRef = React.useRef<HTMLDivElement | null>(null);
 
   const [activePost, setActivePost] = useState<any | null>(null);
-  const { user } = useAuth();
+  const { user, setUser } = useAuth();
+
   const [showPostForm, setShowPostForm] = useState(false);
   const [posts, setPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,6 +38,105 @@ const Trangchu = () => {
   const [previewImages, setPreviewImages] = useState<string[]>([]);
   const [postVideos, setPostVideos] = useState<File[]>([]);
   const [previewVideos, setPreviewVideos] = useState<string[]>([]);
+  // Danh sách ID người mà user hiện tại đang theo dõi
+  const [followingList, setFollowingList] = useState<string[]>([]);
+  // Loading state cho follow/unfollow actions
+  const [followingInProgress, setFollowingInProgress] = useState<Set<string>>(new Set());
+
+  // Modal states cho hiển thị danh sách like/share
+  const [showLikesModal, setShowLikesModal] = useState(false);
+  const [showSharesModal, setShowSharesModal] = useState(false);
+  const [modalUsers, setModalUsers] = useState<any[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [modalTitle, setModalTitle] = useState("");
+
+  // Hàm kiểm tra đã theo dõi ai chưa
+  const isFollowing = (targetId: string) => {
+    return followingList.includes(targetId);
+  };
+
+  // Hàm kiểm tra có đang xử lý follow/unfollow không
+  const isFollowingInProgress = (targetId: string) => {
+    return followingInProgress.has(targetId);
+  };
+
+  // Hàm fetch danh sách users đã like bài viết
+  const fetchLikedUsers = async (postId: string) => {
+    console.log('🔍 fetchLikedUsers called with postId:', postId);
+    setLoadingUsers(true);
+    setModalTitle("Những người đã thích bài viết này");
+    setShowLikesModal(true);
+    
+    try {
+      const url = `http://localhost:3000/post/${postId}/likes`;
+      console.log('🌐 Calling API:', url);
+      
+      const res = await fetch(url, {
+        credentials: 'include',
+      });
+      
+      console.log('📡 API response status:', res.status);
+      
+      if (res.ok) {
+        const data = await res.json();
+        console.log('✅ Likes data received:', data);
+        setModalUsers(data.users || []);
+      } else {
+        console.error('❌ API error:', res.status, res.statusText);
+        const errorData = await res.text();
+        console.error('Error details:', errorData);
+        setModalUsers([]);
+      }
+    } catch (err) {
+      console.error("❌ Network error fetching liked users:", err);
+      setModalUsers([]);
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
+  // Hàm fetch danh sách users đã share bài viết  
+  const fetchSharedUsers = async (postId: string) => {
+    setLoadingUsers(true);
+    setModalTitle("Những người đã chia sẻ bài viết này");
+    setShowSharesModal(true);
+    
+    try {
+      const res = await fetch(`http://localhost:3000/post/${postId}/shares`, {
+        credentials: 'include',
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setModalUsers(data.shares || []);
+      } else {
+        console.error('Không thể lấy danh sách người chia sẻ');
+        setModalUsers([]);
+      }
+    } catch (err) {
+      console.error("Error fetching shared users:", err);
+      setModalUsers([]);
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
+  // ✅ Khi load trang, lấy danh sách following thật từ Firestore
+  useEffect(() => {
+    const fetchFollowing = async () => {
+      if (!user) return;
+      try {
+        const res = await fetch(`http://localhost:3000/user/me/${user.id}`);
+        const data = await res.json();
+        if (data.success && data.user.following) {
+          setFollowingList(data.user.following);
+        }
+      } catch (err) {
+        console.error("Lỗi khi tải danh sách following:", err);
+      }
+    };
+    fetchFollowing();
+  }, [user]);
 
   // Fetch posts
   const fetchPosts = async () => {
@@ -45,7 +145,7 @@ const Trangchu = () => {
       const res = await fetch("http://localhost:3000/post");
       const data = await res.json();
       if (data.success) setPosts(data.posts);
-    } catch {}
+    } catch { }
     setLoading(false);
   };
 
@@ -163,8 +263,13 @@ const Trangchu = () => {
         className="container"
         style={{ width: "100%", maxWidth: 600, margin: "0 auto" }}
       >
-        <div className="post-box">
-          <img src={user?.avatar} alt="Avatar" className="avatar" />
+        <div className="post-box" style={{ display: "flex", alignItems: "center" }}>
+          <img
+            src={user?.avatar}
+            alt="Avatar"
+            className="avatar"
+            style={{ width: 40, height: 40, borderRadius: "50%", marginRight: 12 }}
+          />
           <button
             onClick={() => setShowPostForm(!showPostForm)}
             className="thought-btn"
@@ -172,6 +277,7 @@ const Trangchu = () => {
             {user?.name}, bạn đang nghĩ gì thế?
           </button>
         </div>
+
         {showPostForm && (
           <div className="post-form-container">
             <form
@@ -235,7 +341,7 @@ const Trangchu = () => {
                     setPostImages([]);
                     setPostVideos([]);
                     setShowPostForm(false);
-                    setUploadSuccess("Đăng bài thành công!");
+                    // setUploadSuccess("Đăng bài thành công!");
                     const p = { ...data.post, _justNow: true };
                     setPosts((prev) => [p, ...prev]);
                     setTimeout(
@@ -673,7 +779,8 @@ const Trangchu = () => {
             <p className="text-center">Các bảng tin đang được tải...</p>
           ) : (
             posts.map((post) => {
-              const isAuthor = user && post.authorId === user.email;
+              console.log("[DEBUG] post.authorId:", post.authorId, "[DEBUG] followingList:", followingList);
+              const isAuthor = user && post.authorId === user.id;
               return (
                 <div
                   key={post._id}
@@ -728,13 +835,148 @@ const Trangchu = () => {
                     >
                       <div
                         style={{
-                          fontWeight: 700,
-                          fontSize: 15,
-                          color: "#1b1b1b",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8, // khoảng cách đều giữa các phần
                         }}
                       >
-                        {post.authorName}
+                        <span
+                          style={{
+                            fontWeight: 700,
+                            fontSize: 15,
+                            color: "#1b1b1b",
+                          }}>
+                          {post.authorName}
+                        </span>
+                        {/* ✅ Chỉ hiển thị nút nếu KHÔNG phải tài khoản hiện tại */}
+                        {user && post.authorId !== user.id && (
+                          <button
+                            data-follow-button={post.authorId}
+                            disabled={isFollowingInProgress(post.authorId)}
+                            style={{
+                              background: isFollowing(post.authorId) ? "#fff" : "#fff",
+                              color: isFollowingInProgress(post.authorId)
+                                ? "#999"
+                                : (isFollowing(post.authorId) ? "#666" : "#1877f2"),
+                              border: isFollowing(post.authorId)
+                                ? "1px solid #ccc"
+                                : "1px solid #1877f2",
+                              borderRadius: 16,
+                              padding: "4px 12px",
+                              fontSize: 14,
+                              fontWeight: 600,
+                              cursor: isFollowingInProgress(post.authorId) ? "not-allowed" : "pointer",
+                              transition: "all .2s ease, transform .1s ease",
+                              marginLeft: 4, // 👈 lùi sát về bên trái
+                              opacity: isFollowingInProgress(post.authorId) ? 0.6 : 1,
+                            }}
+                            onMouseOver={(e) => {
+                              if (!isFollowingInProgress(post.authorId)) {
+                                if (isFollowing(post.authorId)) {
+                                  e.currentTarget.style.background = "#f5f5f5";
+                                } else {
+                                  e.currentTarget.style.background = "#f0f2f5";
+                                }
+                                e.currentTarget.style.transform = "scale(1.02)";
+                              }
+                            }}
+                            onMouseOut={(e) => {
+                              if (!isFollowingInProgress(post.authorId)) {
+                                e.currentTarget.style.background = "#fff";
+                                e.currentTarget.style.transform = "scale(1)";
+                              }
+                            }}
+                            onClick={async () => {
+                              // Tránh multiple clicks
+                              if (isFollowingInProgress(post.authorId)) return;
+
+                              // Set loading state
+                              setFollowingInProgress(prev => new Set(prev).add(post.authorId));
+
+                              // Optimistic update - cập nhật UI ngay lập tức
+                              const isCurrentlyFollowing = isFollowing(post.authorId);
+                              setFollowingList((prev) =>
+                                isCurrentlyFollowing
+                                  ? prev.filter((id) => id !== post.authorId)
+                                  : [...prev, post.authorId]
+                              );
+
+                              try {
+                                const res = await fetch("http://localhost:3000/user/follow", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({
+                                    currentUserId: user.id,
+                                    targetUserId: post.authorId,
+                                  }),
+                                });
+                                const data = await res.json();
+
+                                if (data.success) {
+                                  // Sync với server response (case server khác với optimistic)
+                                  setFollowingList((prev) =>
+                                    data.action === "followed"
+                                      ? [...prev.filter((id) => id !== post.authorId), post.authorId]
+                                      : prev.filter((id) => id !== post.authorId)
+                                  );
+
+                                  // Visual feedback - flash success color
+                                  const buttonEl = document.querySelector(`[data-follow-button="${post.authorId}"]`) as HTMLElement;
+                                  if (buttonEl) {
+                                    buttonEl.style.background = data.action === "followed" ? "#42a047" : "#ff9800";
+                                    buttonEl.style.color = "#fff";
+                                    setTimeout(() => {
+                                      buttonEl.style.background = "#fff";
+                                      buttonEl.style.color = isFollowing(post.authorId) ? "#666" : "#1877f2";
+                                    }, 300);
+                                  }
+
+                                  // ✅ Cập nhật user trong background (không block UI)
+                                  fetch(`http://localhost:3000/user/me/${user.id}`)
+                                    .then(resUser => resUser.json())
+                                    .then(dataUser => {
+                                      if (dataUser.success && dataUser.user) {
+                                        setUser(dataUser.user);
+                                      }
+                                    })
+                                    .catch(err => console.error("Lỗi sync user data:", err));
+                                } else {
+                                  // Rollback optimistic update nếu thất bại
+                                  setFollowingList((prev) =>
+                                    isCurrentlyFollowing
+                                      ? [...prev, post.authorId]
+                                      : prev.filter((id) => id !== post.authorId)
+                                  );
+                                }
+                              } catch (err) {
+                                console.error("Lỗi khi theo dõi/bỏ theo dõi:", err);
+                                // Rollback optimistic update nếu có lỗi
+                                setFollowingList((prev) =>
+                                  isCurrentlyFollowing
+                                    ? [...prev, post.authorId]
+                                    : prev.filter((id) => id !== post.authorId)
+                                );
+                              } finally {
+                                // Clear loading state
+                                setFollowingInProgress(prev => {
+                                  const newSet = new Set(prev);
+                                  newSet.delete(post.authorId);
+                                  return newSet;
+                                });
+                              }
+                            }}
+
+                          >
+                            {isFollowingInProgress(post.authorId)
+                              ? "..."
+                              : (isFollowing(post.authorId) ? "Đang theo dõi" : "Theo dõi")
+                            }
+                          </button>
+                        )}
+
+
                       </div>
+
                       <div style={{ fontSize: 12, color: "#65676b" }}>
                         {formatTime(post.createdAt, post._justNow)}
                       </div>
@@ -1049,7 +1291,7 @@ const Trangchu = () => {
                                             if (!data.success)
                                               alert(
                                                 "Xóa ảnh trên Cloudinary thất bại: " +
-                                                  (data.message || "")
+                                                (data.message || "")
                                               );
                                           } catch (err) {
                                             alert("Lỗi xóa ảnh Cloudinary");
@@ -1144,7 +1386,7 @@ const Trangchu = () => {
                                           if (!data.success)
                                             alert(
                                               "Xóa video trên Cloudinary thất bại: " +
-                                                (data.message || "")
+                                              (data.message || "")
                                             );
                                         } catch (err) {
                                           alert("Lỗi xóa video Cloudinary");
@@ -1423,14 +1665,14 @@ const Trangchu = () => {
                           post.images.length === 1
                             ? "1fr"
                             : post.images.length === 2
-                            ? "1fr 1fr"
-                            : "2fr 1fr",
+                              ? "1fr 1fr"
+                              : "2fr 1fr",
                         gridTemplateRows:
                           post.images.length <= 2
                             ? "1fr"
                             : post.images.length === 3
-                            ? "1fr 1fr"
-                            : "1fr 1fr",
+                              ? "1fr 1fr"
+                              : "1fr 1fr",
                         gridAutoFlow: "dense",
                         justifyContent: "center",
                         alignItems: "center",
@@ -1449,10 +1691,10 @@ const Trangchu = () => {
                             post.images.length === 1
                               ? "420px"
                               : post.images.length === 2
-                              ? "340px"
-                              : idx === 0
-                              ? "340px"
-                              : "165px",
+                                ? "340px"
+                                : idx === 0
+                                  ? "340px"
+                                  : "165px",
                           objectFit: "cover",
                           borderRadius: 16,
                           boxShadow: "0 4px 24px #b6b8c355",
@@ -1461,20 +1703,20 @@ const Trangchu = () => {
                             post.images.length === 1
                               ? "1/2"
                               : post.images.length === 2
-                              ? idx === 0
-                                ? "1/2"
-                                : "2/3"
-                              : idx === 0
-                              ? "1/2"
-                              : "2/3",
+                                ? idx === 0
+                                  ? "1/2"
+                                  : "2/3"
+                                : idx === 0
+                                  ? "1/2"
+                                  : "2/3",
                           gridRow:
                             post.images.length <= 2
                               ? "1/2"
                               : idx === 0
-                              ? "1/3"
-                              : idx === 1
-                              ? "1/2"
-                              : "2/3",
+                                ? "1/3"
+                                : idx === 1
+                                  ? "1/2"
+                                  : "2/3",
                           position: "relative",
                         };
                         // Nếu là ảnh thứ 4 và còn dư, hiện +N
@@ -1669,10 +1911,14 @@ const Trangchu = () => {
                     <div
                       style={{
                         display: "flex",
-                        gap: 16,
-                        margin: "18px 0 0 0",
+                        gap: 24,
+                        margin: "24px 0 0 0",
                         flexWrap: "wrap",
                         justifyContent: "center",
+                        alignItems: "center",
+                        width: "100%",
+                        minHeight: "420px",
+                        maxWidth: "900px",
                       }}
                     >
                       {post.videos.map((vid: string, idx: number) => {
@@ -1685,23 +1931,134 @@ const Trangchu = () => {
                             src={src}
                             controls
                             style={{
-                              width: 340,
-                              height: 340,
-                              borderRadius: 16,
-                              boxShadow: "0 4px 24px #b6b8c355",
+                              width: "100%",
+                              maxWidth: "720px",
+                              height: "420px",
+                              borderRadius: 18,
+                              boxShadow: "0 8px 32px #b6b8c355",
                               background: "#000",
+                              objectFit: "contain",
+                              margin: "0 auto",
+                              display: "block",
                             }}
                           />
                         );
                       })}
                     </div>
                   )}
+
+                  {/* Thống kê reactions */}
+                  {(post.likes?.length > 0 || post.comments?.length > 0 || post.shares > 0) && (
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        padding: "12px 0",
+                        fontSize: 13,
+                        color: "#65737e",
+                        borderBottom: "1px solid #e5e7eb",
+                        marginBottom: 12,
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        {post.likes?.length > 0 && (
+                          <div 
+                            style={{ 
+                              display: "flex", 
+                              alignItems: "center", 
+                              gap: 6,
+                              cursor: "pointer",
+                              padding: "4px 8px",
+                              borderRadius: 6,
+                              transition: "background-color 0.2s"
+                            }}
+                            onClick={() => fetchLikedUsers(post._id)}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "rgba(107, 114, 128, 0.1)"}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+                          >
+                            <div
+                              style={{
+                                width: 20,
+                                height: 20,
+                                borderRadius: "50%",
+                                background: "linear-gradient(135deg, #dc2626 0%, #ef4444 100%)",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                boxShadow: "0 2px 4px rgba(220, 38, 38, 0.3)",
+                              }}
+                            >
+                              <Heart size={11} fill="#fff" color="#fff" />
+                            </div>
+                            <span style={{ fontWeight: 500 }}>{post.likes.length}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                        {post.comments?.length > 0 && (
+                          <span
+                            style={{
+                              cursor: "pointer",
+                              fontWeight: 500,
+                              transition: "color 0.2s",
+                            }}
+                            onClick={() => {
+                              setActivePost(post);
+                              setShowCommentModal(true);
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.color = "#374151"}
+                            onMouseLeave={(e) => e.currentTarget.style.color = "#65737e"}
+                          >
+                            <CommentSection
+                              comments={post.comments || []}
+                              onShowModal={() => {
+                                setActivePost(post);
+                                setShowCommentModal(true);
+                              }}
+                            />
+                          </span>
+                        )}
+                        {post.shares > 0 && (
+                          <span
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 6,
+                              fontWeight: 500,
+                              fontSize: 15,
+                              color: "#555",
+                              cursor: "pointer",
+                              marginLeft: 10,
+                              marginTop: 15,
+                              padding: "4px 8px",
+                              borderRadius: 6,
+                              transition: "background-color 0.2s"
+                            }}
+                            onClick={() => fetchSharedUsers(post._id)}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "rgba(107, 114, 128, 0.1)"}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+                          >
+                            {post.shares.toLocaleString("vi-VN")}
+                            <Share2 size={17} strokeWidth={1.3} />
+                          </span>
+                        )}
+
+
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Action buttons */}
                   <div
                     style={{
                       display: "flex",
-                      gap: 24,
+                      justifyContent: "space-around",
                       alignItems: "center",
-                      marginBottom: 8,
+                      padding: "8px 0",
+                      borderBottom: "1px solid #e5e7eb",
+                      marginBottom: 12,
                     }}
                   >
                     <button
@@ -1748,27 +2105,81 @@ const Trangchu = () => {
                         } catch (err) {
                           alert(
                             "Không thể kết nối máy chủ. Vui lòng thử lại!\n" +
-                              (err instanceof Error ? err.message : "")
+                            (err instanceof Error ? err.message : "")
                           );
                         }
                       }}
                       style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 8,
+                        flex: 1,
+                        padding: "10px 16px",
+                        background: post.likes?.includes(user?.email)
+                          ? "rgba(239, 68, 68, 0.1)"
+                          : "transparent",
                         color: post.likes?.includes(user?.email)
-                          ? "#e11d48"
-                          : "#888",
-                        fontWeight: 700,
-                        fontSize: 17,
-                        background: "#f3f4f6",
+                          ? "#dc2626"
+                          : "#65737e",
                         border: "none",
                         borderRadius: 8,
-                        padding: "4px 18px",
-                        transition: "background .2s",
+                        fontSize: 15,
+                        fontWeight: 600,
                         cursor: "pointer",
+                        transition: "all 0.2s ease",
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!post.likes?.includes(user?.email)) {
+                          e.currentTarget.style.backgroundColor = "rgba(107, 114, 128, 0.1)";
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!post.likes?.includes(user?.email)) {
+                          e.currentTarget.style.backgroundColor = "transparent";
+                        }
                       }}
                     >
-                      <Heart size={16} strokeWidth={1} />{" "}
-                      {post.likes?.length || 0}
+                      <Heart
+                        size={18}
+                        strokeWidth={1.5}
+                        fill={post.likes?.includes(user?.email) ? "#dc2626" : "none"}
+                      />
+                      <span>Thích</span>
                     </button>
+
+                    <button
+                      onClick={() => {
+                        setActivePost(post);
+                        setShowCommentModal(true);
+                      }}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 8,
+                        flex: 1,
+                        padding: "10px 16px",
+                        background: "transparent",
+                        color: "#65737e",
+                        border: "none",
+                        borderRadius: 8,
+                        fontSize: 15,
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        transition: "all 0.2s ease",
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = "rgba(107, 114, 128, 0.1)";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = "transparent";
+                      }}
+                    >
+                      <MessageCircle size={18} strokeWidth={1.5} />
+                      <span>Bình luận</span>
+                    </button>
+
                     <button
                       onClick={() => {
                         setSharePost(post);
@@ -1777,28 +2188,41 @@ const Trangchu = () => {
                         setSharePrivacy("public");
                       }}
                       style={{
-                        color: "#6366f1",
-                        fontWeight: 700,
-                        fontSize: 17,
-                        background: "#f3f4f6",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 8,
+                        flex: 1,
+                        padding: "10px 16px",
+                        background: "transparent",
+                        color: "#65737e",
                         border: "none",
                         borderRadius: 8,
-                        padding: "4px 18px",
-                        transition: "background .2s",
+                        fontSize: 15,
+                        fontWeight: 600,
                         cursor: "pointer",
+                        transition: "all 0.2s ease",
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = "rgba(107, 114, 128, 0.1)";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = "transparent";
                       }}
                     >
-                      <Share2 size={16} strokeWidth={1} /> {post.shares || 0}
+                      <Share2 size={18} strokeWidth={1.5} />
+                      <span>Chia sẻ</span>
                     </button>
                   </div>
+
                   {/* Comment section - refactored */}
-                  <CommentSection
+                  {/* <CommentSection
                     comments={post.comments || []}
                     onShowModal={() => {
                       setActivePost(post);
                       setShowCommentModal(true);
                     }}
-                  />
+                  /> */}
                   {/* Modal chia sẻ bài viết */}
                   {showShareModal && (
                     <ShareModal
@@ -1879,6 +2303,229 @@ const Trangchu = () => {
             fetchPosts();
           }}
         />
+      )}
+
+      {/* Modal hiển thị danh sách người đã like */}
+      {showLikesModal && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.6)",
+            zIndex: 10000,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 20,
+          }}
+          onClick={() => setShowLikesModal(false)}
+        >
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: 12,
+              width: "100%",
+              maxWidth: 400,
+              maxHeight: "80vh",
+              overflow: "hidden",
+              boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                padding: "20px 24px",
+                borderBottom: "1px solid #e5e7eb",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>
+                {modalTitle}
+              </h3>
+              <button
+                onClick={() => setShowLikesModal(false)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  fontSize: 24,
+                  cursor: "pointer",
+                  color: "#6b7280",
+                  padding: 4,
+                }}
+              >
+                ×
+              </button>
+            </div>
+            <div
+              style={{
+                maxHeight: "60vh",
+                overflowY: "auto",
+                padding: "12px 0",
+              }}
+            >
+              {loadingUsers ? (
+                <div style={{ textAlign: "center", padding: 40, color: "#6b7280" }}>
+                  Đang tải...
+                </div>
+              ) : modalUsers.length === 0 ? (
+                <div style={{ textAlign: "center", padding: 40, color: "#6b7280" }}>
+                  Chưa có ai thích bài viết này
+                </div>
+              ) : (
+                modalUsers.map((user, index) => (
+                  <div
+                    key={index}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      padding: "12px 24px",
+                      cursor: "pointer",
+                      transition: "background-color 0.2s",
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#f9fafb"}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+                  >
+                    <img
+                      src={user.avatar || "https://via.placeholder.com/40x40?text=" + (user.name?.charAt(0) || 'U')}
+                      alt={user.name}
+                      style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: "50%",
+                        marginRight: 12,
+                        objectFit: "cover",
+                      }}
+                    />
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 15 }}>
+                        {user.name}
+                      </div>
+                      <div style={{ fontSize: 13, color: "#6b7280" }}>
+                        {user.email}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal hiển thị danh sách người đã share */}
+      {showSharesModal && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.6)",
+            zIndex: 10000,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 20,
+          }}
+          onClick={() => setShowSharesModal(false)}
+        >
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: 12,
+              width: "100%",
+              maxWidth: 400,
+              maxHeight: "80vh",
+              overflow: "hidden",
+              boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                padding: "20px 24px",
+                borderBottom: "1px solid #e5e7eb",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>
+                {modalTitle}
+              </h3>
+              <button
+                onClick={() => setShowSharesModal(false)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  fontSize: 24,
+                  cursor: "pointer",
+                  color: "#6b7280",
+                  padding: 4,
+                }}
+              >
+                ×
+              </button>
+            </div>
+            <div
+              style={{
+                maxHeight: "60vh",
+                overflowY: "auto",
+                padding: "12px 0",
+              }}
+            >
+              {loadingUsers ? (
+                <div style={{ textAlign: "center", padding: 40, color: "#6b7280" }}>
+                  Đang tải...
+                </div>
+              ) : modalUsers.length === 0 ? (
+                <div style={{ textAlign: "center", padding: 40, color: "#6b7280" }}>
+                  Chưa có ai chia sẻ bài viết này
+                </div>
+              ) : (
+                modalUsers.map((user, index) => (
+                  <div
+                    key={index}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      padding: "12px 24px",
+                      cursor: "pointer",
+                      transition: "background-color 0.2s",
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#f9fafb"}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+                  >
+                    <img
+                      src={user.avatar || "https://via.placeholder.com/40x40?text=" + (user.name?.charAt(0) || 'U')}
+                      alt={user.name}
+                      style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: "50%",
+                        marginRight: 12,
+                        objectFit: "cover",
+                      }}
+                    />
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 15 }}>
+                        {user.name}
+                      </div>
+                      <div style={{ fontSize: 13, color: "#6b7280" }}>
+                        {user.email}
+                      </div>
+                      {user.sharedAt && (
+                        <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 2 }}>
+                          Chia sẻ lúc {new Date(user.sharedAt).toLocaleString("vi-VN")}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

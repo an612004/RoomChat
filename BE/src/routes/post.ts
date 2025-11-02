@@ -41,12 +41,72 @@ router.post('/comment/:id/react', async (req: Request, res: Response) => {
       comment.reactions.heart.push(userId);
       await comment.save();
     }
-    return res.json({ success: true, count: comment.reactions.heart.length });
+    return res.json({ success: true, hearts: comment.reactions.heart });
   } catch (err) {
     return res.status(500).json({ success: false });
   }
 });
 
+// Bỏ cảm xúc cho bình luận
+router.delete('/comment/:id/react', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { userId } = req.query; // Lấy từ query string
+    if (!userId) return res.status(400).json({ success: false });
+    const comment = await Comment.findById(id);
+    if (!comment) return res.status(404).json({ success: false });
+    comment.reactions = comment.reactions || {};
+    comment.reactions.heart = comment.reactions.heart || [];
+    comment.reactions.heart = comment.reactions.heart.filter((email: string) => email !== userId);
+    await comment.save();
+    return res.json({ success: true, hearts: comment.reactions.heart });
+  } catch (err) {
+    return res.status(500).json({ success: false });
+  }
+});
+// Cảm xúc cho reply của bình luận
+router.post('/comment/:commentId/reply/:replyId/react', async (req: Request, res: Response) => {
+  try {
+    const { commentId, replyId } = req.params;
+    const { userId, reaction } = req.body;
+    if (!userId || reaction !== 'heart') return res.status(400).json({ success: false });
+    const comment = await Comment.findById(commentId);
+    if (!comment) return res.status(404).json({ success: false });
+    comment.replies = comment.replies || [];
+    const reply = comment.replies.find(r => r._id?.toString() === replyId);
+    if (!reply) return res.status(404).json({ success: false });
+    reply.reactions = reply.reactions || {};
+    reply.reactions.heart = reply.reactions.heart || [];
+    if (!reply.reactions.heart.includes(userId)) {
+      reply.reactions.heart.push(userId);
+      await comment.save();
+    }
+    return res.json({ success: true, hearts: reply.reactions.heart });
+  } catch (err) {
+    return res.status(500).json({ success: false });
+  }
+});
+
+// Bỏ cảm xúc cho reply của bình luận
+router.delete('/comment/:commentId/reply/:replyId/react', async (req: Request, res: Response) => {
+  try {
+    const { commentId, replyId } = req.params;
+    const { userId } = req.query; // Lấy từ query string
+    if (!userId) return res.status(400).json({ success: false });
+    const comment = await Comment.findById(commentId);
+    if (!comment) return res.status(404).json({ success: false });
+    comment.replies = comment.replies || [];
+    const reply = comment.replies.find(r => r._id?.toString() === replyId);
+    if (!reply) return res.status(404).json({ success: false });
+    reply.reactions = reply.reactions || {};
+    reply.reactions.heart = reply.reactions.heart || [];
+    reply.reactions.heart = reply.reactions.heart.filter((id: string) => id !== userId);
+    await comment.save();
+    return res.json({ success: true, hearts: reply.reactions.heart });
+  } catch (err) {
+    return res.status(500).json({ success: false });
+  }
+});
 // Tạo bài viết mới (có thể có ảnh và video)
 router.post('/', async (req: Request, res: Response) => {
   try {
@@ -258,7 +318,7 @@ router.put('/comment/:id', async (req: Request, res: Response) => {
     if (Array.isArray(videos)) comment.videos = videos;
     if (Array.isArray(imagePublicIds)) comment.imagePublicIds = imagePublicIds;
     if (Array.isArray(videoPublicIds)) comment.videoPublicIds = videoPublicIds;
-    comment.createdAt = new Date();
+    comment.updatedAt = new Date();
     await comment.save();
     return res.json({ success: true, comment });
   } catch (err) {
@@ -315,7 +375,7 @@ router.put('/comment/:commentId/reply/:replyId', async (req: Request, res: Respo
     reply.content = content;
     if (Array.isArray(images)) reply.images = images;
     if (Array.isArray(videos)) reply.videos = videos;
-    reply.createdAt = new Date();
+    reply.updatedAt = new Date();
     await comment.save();
     return res.json({ success: true, reply });
   } catch (err) {
@@ -350,6 +410,249 @@ router.delete('/comment/:commentId/reply/:replyId', async (req: Request, res: Re
     return res.json({ success: true });
   } catch (err) {
     return res.status(500).json({ success: false });
+  }
+});
+
+// Chia sẻ bài viết
+router.post('/:id/share', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { userId, content, privacy = 'public' } = req.body;
+    if (!userId || !content) return res.status(400).json({ success: false, message: 'Thiếu thông tin' });
+    
+    // Lấy bài viết gốc
+    const originalPost = await Post.findById(id);
+    if (!originalPost) return res.status(404).json({ success: false, message: 'Không tìm thấy bài viết' });
+    
+    // Lấy thông tin user từ email
+    const userRes = await fetch(`${process.env.FIREBASE_AUTH_URL || 'http://localhost:3000'}/user/profile/${userId}`);
+    let authorName = 'Unknown User';
+    let authorAvatar = '';
+    
+    if (userRes.ok) {
+      const userData = await userRes.json();
+      if (userData.success) {
+        authorName = userData.user.name || 'Unknown User';
+        authorAvatar = userData.user.avatar || '';
+      }
+    }
+    
+    // Tạo shared post mới
+    const sharedPost = new Post({
+      authorId: userId,
+      authorName,
+      authorAvatar,
+      content,
+      sharedPost: {
+        originalPostId: originalPost._id,
+        originalAuthorId: originalPost.authorId,
+        originalAuthorName: originalPost.authorName,
+        originalAuthorAvatar: originalPost.authorAvatar,
+        originalContent: originalPost.content,
+        originalImages: originalPost.images || [],
+        originalVideos: originalPost.videos || [],
+        originalCreatedAt: originalPost.createdAt,
+      },
+      privacy,
+      likes: [],
+      shares: 0,
+      createdAt: new Date()
+    });
+    
+    await sharedPost.save();
+    
+    // Tăng số lượng share của bài viết gốc
+    originalPost.shares = (originalPost.shares || 0) + 1;
+    await originalPost.save();
+    
+    return res.json({ success: true, post: sharedPost });
+  } catch (err) {
+    console.error('Share post error:', err);
+    return res.status(500).json({ success: false, message: 'Lỗi khi chia sẻ bài viết' });
+  }
+});
+
+// Debug endpoint để kiểm tra post data
+router.get('/debug-post/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    console.log('🔍 Debug post ID:', id);
+    
+    const post = await Post.findById(id);
+    if (!post) {
+      return res.json({ found: false, message: 'Post not found' });
+    }
+    
+    return res.json({
+      found: true,
+      postId: post._id,
+      authorId: post.authorId,
+      authorName: post.authorName,
+      content: post.content?.substring(0, 100) + '...',
+      likes: post.likes,
+      likesCount: post.likes?.length || 0,
+      shares: post.shares,
+      createdAt: post.createdAt
+    });
+  } catch (err) {
+    console.error('Debug error:', err);
+    return res.status(500).json({ error: 'Debug failed' });
+  }
+});
+
+// API lấy danh sách người đã like bài viết
+router.get('/:id/likes', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    console.log('🔍 GET /post/:id/likes called with postID:', id);
+    
+    // Tìm bài viết theo ID
+    const post = await Post.findById(id);
+    if (!post) {
+      console.log('❌ Post not found:', id);
+      return res.status(404).json({ success: false, message: 'Không tìm thấy bài viết' });
+    }
+    
+    // Lấy danh sách user emails đã like
+    const likedUserEmails = post.likes || [];
+    console.log('📋 Post likes array:', likedUserEmails);
+    
+    if (likedUserEmails.length === 0) {
+      console.log('ℹ️ No likes found for post:', id);
+      return res.json({ success: true, users: [] });
+    }
+    
+    // Import Firestore để lấy thông tin user thật
+    const { db } = require('../config/firebaseConfig');
+    
+    const users = [];
+    for (const email of likedUserEmails) {
+      try {
+        console.log(`🔍 Looking up user: ${email}`);
+        
+        // Thử lấy user bằng document ID (email làm ID)
+        let userDoc = await db.collection('users').doc(email).get();
+        let userData = null;
+        
+        if (userDoc.exists) {
+          userData = userDoc.data();
+          console.log(`✅ Found user by doc ID: ${email}`, userData);
+        } else {
+          // Nếu không tìm thấy bằng doc ID, thử query bằng field email
+          const userSnapshot = await db.collection('users').where('email', '==', email).limit(1).get();
+          if (!userSnapshot.empty) {
+            userData = userSnapshot.docs[0].data();
+            console.log(`✅ Found user by email query: ${email}`, userData);
+          }
+        }
+        
+        if (userData) {
+          users.push({
+            id: userData.uid || userData.id || email,
+            email: email,
+            name: userData.displayName || userData.name || userData.fullName || email.split('@')[0],
+            avatar: userData.photoURL || userData.avatar || userData.profilePicture || 'https://via.placeholder.com/40x40?text=' + (userData.name?.charAt(0) || 'U')
+          });
+        } else {
+          console.log(`❌ User not found: ${email}`);
+          // Fallback nếu không tìm thấy user trong Firestore
+          users.push({
+            id: email,
+            email: email,
+            name: email.split('@')[0],
+            avatar: 'https://via.placeholder.com/40x40?text=' + email.charAt(0).toUpperCase()
+          });
+        }
+      } catch (userError) {
+        console.error(`❌ Error fetching user ${email}:`, userError);
+        // Fallback cho user có lỗi
+        users.push({
+          id: email,
+          email: email,
+          name: email.split('@')[0],
+          avatar: 'https://via.placeholder.com/40x40?text=' + email.charAt(0).toUpperCase()
+        });
+      }
+    }
+    
+    console.log(`✅ Returning ${users.length} users for post ${id}`);
+    return res.json({ success: true, users });
+  } catch (err) {
+    console.error('❌ Get likes error:', err);
+    return res.status(500).json({ success: false, message: 'Lỗi khi lấy danh sách like' });
+  }
+});
+
+// API lấy danh sách người đã share bài viết  
+router.get('/:id/shares', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    console.log('🔍 GET /post/:id/shares called with postID:', id);
+    
+    // Tìm tất cả bài viết có sharedPost._id === id
+    const sharedPosts = await Post.find({ 'sharedPost._id': id });
+    console.log(`📋 Found ${sharedPosts.length} shares for post ${id}`);
+    
+    const { db } = require('../config/firebaseConfig');
+    
+    const shares = [];
+    for (const post of sharedPosts) {
+      try {
+        console.log(`🔍 Looking up shared user: ${post.authorId}`);
+        
+        // Thử lấy user bằng document ID (email làm ID)  
+        let userDoc = await db.collection('users').doc(post.authorId).get();
+        let userData = null;
+        
+        if (userDoc.exists) {
+          userData = userDoc.data();
+          console.log(`✅ Found shared user by doc ID: ${post.authorId}`, userData);
+        } else {
+          // Nếu không tìm thấy bằng doc ID, thử query bằng field email
+          const userSnapshot = await db.collection('users').where('email', '==', post.authorId).limit(1).get();
+          if (!userSnapshot.empty) {
+            userData = userSnapshot.docs[0].data();
+            console.log(`✅ Found shared user by email query: ${post.authorId}`, userData);
+          }
+        }
+        
+        if (userData) {
+          shares.push({
+            id: userData.uid || userData.id || post.authorId,
+            email: post.authorId,
+            name: userData.displayName || userData.name || userData.fullName || post.authorName || post.authorId.split('@')[0],
+            avatar: userData.photoURL || userData.avatar || userData.profilePicture || post.authorAvatar || 'https://via.placeholder.com/40x40?text=' + (userData.name?.charAt(0) || 'U'),
+            sharedAt: post.createdAt
+          });
+        } else {
+          console.log(`❌ Shared user not found: ${post.authorId}`);
+          // Fallback với thông tin từ post
+          shares.push({
+            id: post.authorId,
+            email: post.authorId,
+            name: post.authorName || post.authorId.split('@')[0],
+            avatar: post.authorAvatar || 'https://via.placeholder.com/40x40?text=' + (post.authorName?.charAt(0) || post.authorId.charAt(0).toUpperCase()),
+            sharedAt: post.createdAt
+          });
+        }
+      } catch (userError) {
+        console.error(`❌ Error fetching shared user ${post.authorId}:`, userError);
+        // Fallback với thông tin có sẵn
+        shares.push({
+          id: post.authorId,
+          email: post.authorId,
+          name: post.authorName || post.authorId.split('@')[0],
+          avatar: post.authorAvatar || 'https://via.placeholder.com/40x40?text=' + (post.authorName?.charAt(0) || post.authorId.charAt(0).toUpperCase()),
+          sharedAt: post.createdAt
+        });
+      }
+    }
+    
+    console.log(`✅ Returning ${shares.length} shares for post ${id}`);
+    return res.json({ success: true, shares });
+  } catch (err) {
+    console.error('❌ Get shares error:', err);
+    return res.status(500).json({ success: false, message: 'Lỗi khi lấy danh sách chia sẻ' });
   }
 });
 

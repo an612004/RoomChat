@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { Github, Mail, Facebook } from 'lucide-react';
+import React, { useState } from 'react';
+import { Github, Mail } from 'lucide-react';
 import githubAuthService from '../services/githubAuth';
-import facebookAuthService from '../services/facebookAuth';
 import googleAuthService from '../services/googleAuth';
 import emailOTPService from '../services/emailOTPAuth';
 import OTPVerification from './OTPVerification';
@@ -12,28 +11,13 @@ const Login: React.FC = () => {
   const [email, setEmail] = useState<string>('');
   const [loadingStates, setLoadingStates] = useState<LoadingStates>({
     github: false,
-    facebook: false,
-    email: false
+    email: false,
+    facebook: false
   });
   const [isGoogleLoading, setIsGoogleLoading] = useState<boolean>(false);
   const [showOTPVerification, setShowOTPVerification] = useState<boolean>(false);
   const [sessionToken, setSessionToken] = useState<string>('');
   const navigate = useNavigate();
-
-  // Kiểm tra redirect result từ Facebook khi component mount
-  useEffect(() => {
-    const handleFacebookRedirect = async (): Promise<void> => {
-      const result = await facebookAuthService.handleRedirectResult();
-      if (result && result.success) {
-        console.log('Facebook login success from redirect:', result.user);
-        try { window.dispatchEvent(new Event('show-splash')) } catch (e) { }
-        sessionStorage.setItem('showSplash', '1')
-        navigate('/home');
-      }
-    };
-
-    handleFacebookRedirect();
-  }, [navigate]);
 
   const handleSendCode = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
@@ -74,32 +58,6 @@ const Login: React.FC = () => {
       setLoadingStates(prev => ({ ...prev, github: false }));
       console.error('GitHub login error:', error);
       alert('GitHub login failed. Please try again.');
-    }
-  };
-
-  const handleFacebookLogin = async (): Promise<void> => {
-    try {
-      setLoadingStates(prev => ({ ...prev, facebook: true }));
-
-      // Thử popup trước, nếu không được thì dùng redirect
-      const result = await facebookAuthService.loginWithPopup();
-
-      if (result.success) {
-        console.log('✅ Facebook login successful:', result.user);
-        try { window.dispatchEvent(new Event('show-splash')) } catch (e) { }
-        sessionStorage.setItem('showSplash', '1')
-        navigate('/home');
-      } else {
-        // Nếu popup fail, thử redirect
-        console.log('Popup failed, trying redirect...');
-        await facebookAuthService.loginWithRedirect();
-      }
-
-    } catch (error: any) {
-      console.error('❌ Facebook login error:', error);
-      alert('Facebook login failed. Please try again.');
-    } finally {
-      setLoadingStates(prev => ({ ...prev, facebook: false }));
     }
   };
 
@@ -242,22 +200,6 @@ const Login: React.FC = () => {
                 <>
                   <img src="https://img.icons8.com/?size=100&id=17949&format=png&color=000000" alt="Google" width={20} />
                   <span>Google</span>
-                </>
-              )}
-            </button>
-
-            {/* Facebook */}
-            <button
-              onClick={handleFacebookLogin}
-              disabled={loadingStates.facebook}
-              className={`social-card facebook ${loadingStates.facebook ? 'loading' : ''}`}
-            >
-              {loadingStates.facebook ? (
-                <div className="spinner white"></div>
-              ) : (
-                <>
-                  <Facebook size={20} />
-                  <span>Facebook</span>
                 </>
               )}
             </button>

@@ -226,6 +226,7 @@ router.post('/firebase-auth', async (req, res) => {
             createdAt: new Date()
         };
         // Save user to Firestore
+        let userData = user;
         try {
             const userRef = firebaseConfig_1.db.collection('users').doc(user.id);
             const userDoc = await userRef.get();
@@ -246,6 +247,22 @@ router.post('/firebase-auth', async (req, res) => {
                     lastLogin: new Date()
                 });
                 console.log('🔄 Firebase user updated:', user.name);
+            }
+            // Lấy lại user mới nhất từ Firestore (bao gồm bio)
+            const updatedDoc = await userRef.get();
+            if (updatedDoc.exists) {
+                const docData = updatedDoc.data() || {};
+                userData = {
+                    id: updatedDoc.id,
+                    name: docData.name || user.name,
+                    email: docData.email || user.email,
+                    avatar: docData.avatar || user.avatar,
+                    provider: docData.provider || user.provider,
+                    createdAt: docData.createdAt || user.createdAt,
+                    bio: docData.bio || '',
+                    followers: docData.followers || [],
+                    following: docData.following || []
+                };
             }
             // Save login history
             await firebaseConfig_1.db.collection('loginHistory').add({
@@ -273,7 +290,7 @@ router.post('/firebase-auth', async (req, res) => {
         console.log('🎉 Firebase login successful:', user.name);
         res.json({
             success: true,
-            user: user,
+            user: userData,
             token: appToken,
             message: 'Firebase authentication successful'
         });

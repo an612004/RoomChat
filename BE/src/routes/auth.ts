@@ -12,6 +12,18 @@ interface AuthenticatedRequest extends Request {
   user?: any;
 }
 
+interface AppUser {
+  id: string;
+  name: string;
+  email: string;
+  avatar: string;
+  provider: string;
+  createdAt: Date;
+  bio?: string;
+  followers?: string[];
+  following?: string[];
+}
+
 // GitHub User interface
 interface GitHubUser {
   id: number;
@@ -280,6 +292,7 @@ router.post('/firebase-auth', async (req: Request, res: Response): Promise<void>
     };
 
     // Save user to Firestore
+    let userData = user;
     try {
       const userRef = db.collection('users').doc(user.id);
       const userDoc = await userRef.get();
@@ -301,7 +314,22 @@ router.post('/firebase-auth', async (req: Request, res: Response): Promise<void>
         });
         console.log('🔄 Firebase user updated:', user.name);
       }
-      
+      // Lấy lại user mới nhất từ Firestore (bao gồm bio)
+      const updatedDoc = await userRef.get();
+      if (updatedDoc.exists) {
+        const docData = updatedDoc.data() || {};
+        userData = {
+          id: updatedDoc.id,
+          name: docData.name || user.name,
+          email: docData.email || user.email,
+          avatar: docData.avatar || user.avatar,
+          provider: docData.provider || user.provider,
+          createdAt: docData.createdAt || user.createdAt,
+          bio: docData.bio || '',
+          followers: docData.followers || [],
+          following: docData.following || []
+        } as AppUser;
+      }
       // Save login history
       await db.collection('loginHistory').add({
         userId: user.id,
@@ -336,7 +364,7 @@ router.post('/firebase-auth', async (req: Request, res: Response): Promise<void>
 
     res.json({
       success: true,
-      user: user,
+      user: userData,
       token: appToken,
       message: 'Firebase authentication successful'
     });

@@ -34,33 +34,12 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 const mongoose_1 = __importStar(require("mongoose"));
-const CommentSchema = new mongoose_1.Schema({
-    postId: { type: String, required: true },
-    authorId: { type: String, required: true },
-    authorName: { type: String, required: true },
-    authorAvatar: { type: String },
-    content: { type: String, required: true },
-    createdAt: { type: Date, default: Date.now },
-    images: { type: [String], default: [] },
-    videos: { type: [String], default: [] },
-    imagePublicIds: { type: [String], default: [] },
-    videoPublicIds: { type: [String], default: [] },
-    replies: [
-        {
-            _id: { type: mongoose_1.Schema.Types.ObjectId, default: () => new mongoose_1.default.Types.ObjectId() },
-            authorId: String,
-            authorName: String,
-            authorAvatar: String,
-            content: String,
-            emoji: String,
-            images: { type: [String], default: [] },
-            videos: { type: [String], default: [] },
-            imagePublicIds: { type: [String], default: [] },
-            videoPublicIds: { type: [String], default: [] },
-            createdAt: { type: Date, default: Date.now },
-            reactions: { type: Object, default: {} }
-        }
-    ],
-    reactions: { type: Object, default: {} }
+const UserSchema = new mongoose_1.Schema({
+    name: { type: String, required: true },
+    email: { type: String, required: true, unique: true },
+    avatar: { type: String },
+    bio: { type: String, default: '' },
+    followers: [{ type: String, ref: 'User' }],
+    following: [{ type: String, ref: 'User' }],
 });
-exports.default = mongoose_1.default.model('Comment', CommentSchema);
+exports.default = mongoose_1.default.model('User', UserSchema);

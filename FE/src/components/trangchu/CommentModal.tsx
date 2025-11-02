@@ -40,13 +40,15 @@ const CommentModal: React.FC<CommentModalProps> = ({
   const [activeReplyTo, setActiveReplyTo] = React.useState<string | null>(null);
   const [replyText, setReplyText] = React.useState("");
   const [comments, setComments] = React.useState<any[]>(post.comments || []);
-  // Local reactions state: { [commentId]: number }
-  const [commentHearts, setCommentHearts] = React.useState<{
-    [key: string]: number;
-  }>({});
   const [userReacted, setUserReacted] = React.useState<{
     [key: string]: boolean;
   }>({});
+  // Track recent heart actions to prevent polling from overriding them
+  const recentHeartActions = React.useRef<{
+    [key: string]: number; // timestamp
+  }>({});
+  // Flag to pause polling temporarily during heart actions
+  const [pausePolling, setPausePolling] = React.useState(false);
   const commentsRef = React.useRef<HTMLDivElement | null>(null);
   const postIdRef = React.useRef<string | null>(post?._id || null);
   const [openMenu, setOpenMenu] = React.useState<string | null>(null);
@@ -114,21 +116,11 @@ const CommentModal: React.FC<CommentModalProps> = ({
         }
       );
       const data = await res.json();
-      if (data?.success && data.comment) {
-        setComments((prev) => {
-          const next = [...prev, data.comment];
-          try {
-            onPostUpdate?.(post._id, { comments: next });
-          } catch (e) { }
-          return next;
-        });
+      if (data.success && data.comment) {
+        setComments((prev) => [...prev, data.comment]);
         setNewComment("");
         setNewImages([]);
         setPreviewImages([]);
-        setTimeout(() => {
-          if (commentsRef.current)
-            commentsRef.current.scrollTop = commentsRef.current.scrollHeight;
-        }, 50);
       }
     } catch (err) {
       console.error(err);
@@ -217,9 +209,13 @@ const CommentModal: React.FC<CommentModalProps> = ({
     (post.images && post.images.length > 0) ||
     (post.videos && post.videos.length > 0);
   const [isNarrow, setIsNarrow] = React.useState<boolean>(false);
+  const [isMobile, setIsMobile] = React.useState<boolean>(false);
 
   React.useEffect(() => {
-    const check = () => setIsNarrow(window.innerWidth < 900);
+    const check = () => {
+      setIsNarrow(window.innerWidth < 900);
+      setIsMobile(window.innerWidth < 480);
+    };
     check();
     window.addEventListener("resize", check);
     return () => window.removeEventListener("resize", check);
@@ -278,11 +274,17 @@ const CommentModal: React.FC<CommentModalProps> = ({
   }, [hasMedia, post]);
 
   // Poll comments for real-time-ish updates while modal is open
+  const fetchCommentsRef = React.useRef<(() => Promise<void>) | null>(null);
   React.useEffect(() => {
     let mounted = true;
     let intervalId: any = null;
-
     const fetchComments = async () => {
+      // Skip polling if we're in the middle of a heart action
+      if (pausePolling) {
+        console.log('Skipping polling due to pausePolling=true');
+        return;
+      }
+
       try {
         const res = await fetch(
           `http://localhost:3000/post/${post._id}/comments`
@@ -315,32 +317,51 @@ const CommentModal: React.FC<CommentModalProps> = ({
                 // Merge replies
                 let mergedReplies = c.replies || [];
                 if (Array.isArray(lc.replies)) {
+                  const now = Date.now();
                   mergedReplies = lc.replies.map((r: any) => {
-                    const prevReply = (c.replies || []).find(
-                      (pr: any) => pr._id === r._id
-                    );
-                    if (!prevReply) return r;
-                    // Merge reactions.heart for reply
+                    // Check if there was a recent heart action for this reply
+                    const replyKey = `${id}-${r._id}`;
+                    const recentReplyAction = recentHeartActions.current[replyKey];
+                    const shouldPreserveReplyHeart = recentReplyAction && (now - recentReplyAction) < 15000; // 15 seconds
+
+                    // Find existing reply to preserve its heart reactions if needed
+                    const existingReply = (c.replies || []).find((er: any) => er._id === r._id);
+
+                    if (shouldPreserveReplyHeart) {
+                      console.log(`Preserving reply ${replyKey} heart reactions due to recent action`);
+                    }
+
                     return {
                       ...r,
-                      reactions: {
-                        ...r.reactions,
-                        heart: Array.isArray(r.reactions?.heart)
-                          ? r.reactions.heart
-                          : prevReply.reactions?.heart || [],
-                      },
+                      reactions: shouldPreserveReplyHeart && existingReply?.reactions
+                        ? existingReply.reactions // Keep existing reactions completely
+                        : {
+                          ...r.reactions,
+                          heart: Array.isArray(r.reactions?.heart) ? r.reactions.heart : [],
+                        },
                     };
                   });
                 }
+                // Check if there was a recent heart action for this comment
+                const now = Date.now();
+                const recentCommentAction = recentHeartActions.current[id];
+                const shouldPreserveCommentHeart = recentCommentAction && (now - recentCommentAction) < 15000; // 15 seconds
+
+                if (shouldPreserveCommentHeart) {
+                  console.log(`Preserving comment ${id} heart reactions due to recent action`);
+                } else {
+                  console.log(`Polling updating comment ${id} hearts from backend:`, lc.reactions?.heart);
+                }
+
                 return {
                   ...c,
                   ...lc,
-                  reactions: {
-                    ...lc.reactions,
-                    heart: Array.isArray(lc.reactions?.heart)
-                      ? lc.reactions.heart
-                      : c.reactions?.heart || [],
-                  },
+                  reactions: shouldPreserveCommentHeart
+                    ? c.reactions // Keep existing reactions completely
+                    : {
+                      ...lc.reactions,
+                      heart: Array.isArray(lc.reactions?.heart) ? lc.reactions.heart : c.reactions?.heart || [],
+                    },
                   replies: mergedReplies,
                 };
               });
@@ -354,14 +375,31 @@ const CommentModal: React.FC<CommentModalProps> = ({
     };
 
     // initial fetch
+    fetchCommentsRef.current = fetchComments;
     fetchComments();
-    intervalId = setInterval(fetchComments, 2000);
+    intervalId = setInterval(fetchComments, 5000);
 
     return () => {
       mounted = false;
       if (intervalId) clearInterval(intervalId);
     };
-  }, [post]);
+  }, [post, pausePolling]);
+
+  // Close dropdown menu when clicking outside
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (openMenu && !(event.target as Element).closest('[data-dropdown-menu]')) {
+        setOpenMenu(null);
+      }
+    };
+
+    if (openMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }
+  }, [openMenu]);
 
   return (
     <div
@@ -373,21 +411,22 @@ const CommentModal: React.FC<CommentModalProps> = ({
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        padding: 20,
+        padding: isMobile ? 0 : (isNarrow ? 8 : 20),
       }}
       onClick={onClose}
     >
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          width: "95%",
-          maxWidth: hasMedia ? 980 : 720,
-          maxHeight: "90vh",
+          width: isMobile ? "100%" : (isNarrow ? "98%" : "95%"),
+          maxWidth: hasMedia ? (isMobile ? "100vw" : (isNarrow ? "100vw" : 980)) : (isMobile ? "100vw" : (isNarrow ? "100vw" : 720)),
+          maxHeight: isMobile ? "100vh" : (isNarrow ? "95vh" : "90vh"),
           background: "#fff",
-          borderRadius: 12,
+          borderRadius: isMobile ? 0 : (isNarrow ? 8 : 12),
           overflow: "hidden",
           display: "flex",
-          boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
+          flexDirection: (hasMedia && (isNarrow || isMobile)) ? "column" : "row",
+          boxShadow: isMobile ? "none" : "0 10px 30px rgba(0,0,0,0.2)",
         }}
       >
         {/* Left: media / post preview (render only when media exists) */}
@@ -735,10 +774,12 @@ const CommentModal: React.FC<CommentModalProps> = ({
             style={{
               flex: 1,
               overflowY: "auto",
-              paddingRight: 6,
+              overflowX: "visible",
+              paddingRight: isNarrow ? 4 : 6,
+              paddingLeft: isNarrow ? 8 : 0,
               display: "flex",
               flexDirection: "column",
-              gap: 10,
+              gap: isNarrow ? 8 : 10,
             }}
           >
             {(comments || []).length === 0 ? (
@@ -766,15 +807,18 @@ const CommentModal: React.FC<CommentModalProps> = ({
                         activeReplyTo === c._id
                           ? "0 2px 8px rgba(99,102,241,0.08)"
                           : undefined,
+                      width: "100%",
+                      minWidth: 0,
+                      overflow: "hidden",
                     }}
                   >
                     {/* Heart reaction for comment */}
                     <div
                       style={{
                         display: "flex",
-                        gap: 6,
+                        gap: isNarrow ? 4 : 6,
                         marginBottom: 2,
-                        marginLeft: 48,
+                        marginLeft: isNarrow ? 32 : 48,
                       }}
                     >
                       <button
@@ -782,44 +826,63 @@ const CommentModal: React.FC<CommentModalProps> = ({
                         style={{
                           background: "none",
                           border: "none",
-                          fontSize: 18,
                           cursor: "pointer",
-                          color:
-                            c.reactions?.heart &&
-                              c.reactions.heart.includes(user?.email)
-                              ? "#e11d48"
-                              : "#888",
+                          padding: 0,
                         }}
+                        title={
+                          c.reactions?.heart &&
+                            c.reactions.heart.includes(user?.email)
+                            ? "Bỏ cảm xúc"
+                            : "Thả tim"
+                        }
                         onClick={async () => {
                           // Toggle heart: like/unlike
                           try {
+                            // Pause polling during heart action
+                            setPausePolling(true);
+                            // Record this action to prevent polling override
+                            recentHeartActions.current[c._id] = Date.now();
+
+                            // Resume polling after 10 seconds
+                            setTimeout(() => {
+                              setPausePolling(false);
+                              console.log('Resuming polling after heart action');
+                            }, 10000);
+
                             const isLiked =
                               c.reactions?.heart &&
                               c.reactions.heart.includes(user?.email);
-                            const res = await fetch(
-                              `http://localhost:3000/post/comment/${c._id}/react`,
-                              {
-                                method: isLiked ? "DELETE" : "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({
-                                  userId: user?.email,
-                                  reaction: "heart",
-                                }),
-                              }
-                            );
+
+                            let res;
+                            if (isLiked) {
+                              // DELETE request với userId trong query string
+                              res = await fetch(
+                                `http://localhost:3000/post/comment/${c._id}/react?userId=${encodeURIComponent(user?.email || '')}`,
+                                {
+                                  method: "DELETE",
+                                }
+                              );
+                            } else {
+                              // POST request với body
+                              res = await fetch(
+                                `http://localhost:3000/post/comment/${c._id}/react`,
+                                {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({
+                                    userId: user?.email,
+                                    reaction: "heart",
+                                  }),
+                                }
+                              );
+                            }
+
                             const data = await res.json();
-                            if (data.success) {
-                              setCommentHearts((prev) => ({
-                                ...prev,
-                                [c._id]: data.count,
-                              }));
-                              setUserReacted((prev) => ({
-                                ...prev,
-                                [c._id]: !isLiked,
-                              }));
-                              // Update local comment reactions
-                              setComments((prev) =>
-                                prev.map((com) =>
+                            console.log('Heart API response:', data); // Debug log
+                            if (data.success && Array.isArray(data.hearts)) {
+                              console.log('Updating comment hearts to:', data.hearts);
+                              setComments((prev) => {
+                                const updated = prev.map((com) =>
                                   com._id === c._id
                                     ? {
                                       ...com,
@@ -829,17 +892,40 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                       },
                                     }
                                     : com
-                                )
-                              );
+                                );
+                                console.log('Comments after heart update:', updated.find(com => com._id === c._id)?.reactions?.heart);
+                                return updated;
+                              });
+                              // Don't force fetch immediately, let polling handle it
                             }
                           } catch { }
                         }}
-                      ></button>
+                      >
+                        <div
+                        // style={{
+                        //   display: "flex",
+                        //   alignItems: "center",
+                        //   gap: 6,
+                        //   padding: "4px 12px",
+                        //   borderRadius: 16,
+                        //   background: c.reactions?.heart && c.reactions.heart.includes(user?.email) ? "#fee2e2" : "#f3f4f6",
+                        //   color: c.reactions?.heart && c.reactions.heart.includes(user?.email) ? "#e11d48" : "#888",
+                        //   fontWeight: 600,
+                        //   fontSize: 14,
+                        //   cursor: "pointer",
+                        //   userSelect: "none",
+                        //   transition: "background .2s, color .2s",
+                        // }}
+                        >
+                          {/* <HeartPlus strokeWidth={1} size={18} /> */}
+                          {/* <span>{Array.isArray(c.reactions?.heart) ? c.reactions.heart.length : 0}</span> */}
+                        </div>
+                      </button>
                     </div>
                     <div
                       style={{
                         display: "flex",
-                        gap: 8,
+                        gap: isNarrow ? 6 : 8,
                         alignItems: "flex-start",
                         width: "100%",
                       }}
@@ -847,14 +933,24 @@ const CommentModal: React.FC<CommentModalProps> = ({
                       <img
                         src={c.authorAvatar || "/default-avatar.png"}
                         alt={c.authorName}
-                        style={{ width: 36, height: 36, borderRadius: 999 }}
+                        style={{
+                          width: isNarrow ? 32 : 36,
+                          height: isNarrow ? 32 : 36,
+                          borderRadius: 999
+                        }}
                       />
-                      <div style={{ flex: 1 }}>
+                      <div style={{
+                        flex: 1,
+                        minWidth: 0, // Allows flexbox item to shrink below content size
+                        overflow: "hidden" // Prevents overflow
+                      }}>
                         <div
                           style={{
                             background: "#f3f5ff",
-                            padding: 10,
-                            borderRadius: 10,
+                            padding: isNarrow ? 8 : 10,
+                            borderRadius: isNarrow ? 8 : 10,
+                            wordWrap: "break-word",
+                            overflowWrap: "break-word",
                           }}
                         >
                           <div
@@ -868,7 +964,7 @@ const CommentModal: React.FC<CommentModalProps> = ({
                               style={{
                                 fontWeight: 700,
                                 color: "#2563eb",
-                                fontSize: 15,
+                                fontSize: isNarrow ? 14 : 15,
                               }}
                             >
                               {c.authorName}
@@ -891,10 +987,11 @@ const CommentModal: React.FC<CommentModalProps> = ({
                             {user?.email === c.authorId && (
                               <>
                                 <div
-                                  style={{ position: "relative" }}
+                                  style={{ position: "relative", overflow: "visible" }}
                                   onClick={(e) => e.stopPropagation()}
                                 >
                                   <button
+                                    data-dropdown-menu
                                     aria-label="Options"
                                     onClick={(e) => {
                                       e.stopPropagation();
@@ -917,17 +1014,21 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                   </button>
                                   {openMenu === `c-${c._id}` && (
                                     <div
+                                      data-dropdown-menu
                                       style={{
                                         position: "absolute",
-                                        right: 0,
-                                        top: 28,
+                                        left: "50%",
+                                        top: "-70px",
+                                        transform: "translateX(-50%)",
                                         background: "#fff",
-                                        border: "1px solid #eee",
+                                        border: "1px solid #ddd",
                                         boxShadow:
-                                          "0 6px 18px rgba(0,0,0,0.08)",
+                                          "0 8px 25px rgba(0,0,0,0.15)",
                                         borderRadius: 8,
-                                        overflow: "hidden",
-                                        zIndex: 200,
+                                        overflow: "visible",
+                                        zIndex: 9999,
+                                        minWidth: "140px",
+                                        whiteSpace: "nowrap",
                                       }}
                                       onClick={(e) => e.stopPropagation()}
                                     >
@@ -1044,30 +1145,26 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                             )
                                           ) {
                                             try {
+                                              // Pause polling during heart action
+                                              setPausePolling(true);
+                                              // Record this action to prevent polling override
+                                              recentHeartActions.current[c._id] = Date.now();
+
+                                              // Resume polling after 10 seconds
+                                              setTimeout(() => {
+                                                setPausePolling(false);
+                                                console.log('Resuming polling after heart action (menu)');
+                                              }, 10000);
+
                                               const res = await fetch(
-                                                `http://localhost:3000/post/comment/${c._id}/react`,
+                                                `http://localhost:3000/post/comment/${c._id}/react?userId=${encodeURIComponent(user?.email || '')}`,
                                                 {
                                                   method: "DELETE",
-                                                  headers: {
-                                                    "Content-Type":
-                                                      "application/json",
-                                                  },
-                                                  body: JSON.stringify({
-                                                    userId: user?.email,
-                                                    reaction: "heart",
-                                                  }),
                                                 }
                                               );
                                               const data = await res.json();
-                                              if (data.success) {
-                                                setCommentHearts((prev) => ({
-                                                  ...prev,
-                                                  [c._id]: data.count,
-                                                }));
-                                                setUserReacted((prev) => ({
-                                                  ...prev,
-                                                  [c._id]: false,
-                                                }));
+                                              console.log('Heart API response (menu):', data); // Debug log
+                                              if (data.success && Array.isArray(data.hearts)) {
                                                 setComments((prev) =>
                                                   prev.map((com) =>
                                                     com._id === c._id
@@ -1081,6 +1178,7 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                                       : com
                                                   )
                                                 );
+                                                // Don't force fetch immediately, let polling handle it
                                               }
                                             } catch { }
                                           }
@@ -1096,7 +1194,7 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                           color: "#e11d48",
                                         }}
                                       >
-                                        Gỡ cảm xúc tim
+                                        {/* Gỡ cảm xúc tim */}
                                       </button>
                                     </div>
                                   )}
@@ -1158,6 +1256,11 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                     borderRadius: 8,
                                     border: "1px solid #e6e6ef",
                                     fontSize: 15,
+                                    resize: "vertical",
+                                    minHeight: "60px",
+                                    wordWrap: "break-word",
+                                    whiteSpace: "pre-wrap",
+                                    overflowWrap: "break-word",
                                   }}
                                 />
                                 <div style={{ display: "flex", gap: 8 }}>
@@ -1191,7 +1294,14 @@ const CommentModal: React.FC<CommentModalProps> = ({
                               </form>
                             ) : (
                               <div>
-                                <div>{c.content}</div>
+                                <div style={{
+                                  wordWrap: "break-word",
+                                  wordBreak: "break-word",
+                                  whiteSpace: "pre-wrap",
+                                  overflowWrap: "break-word",
+                                  hyphens: "auto",
+                                  lineHeight: 1.4,
+                                }}>{c.content}</div>
                                 {c.images && c.images.length > 0 && (
                                   <div
                                     style={{
@@ -1259,12 +1369,9 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                             const res = await fetch(
                                               `http://localhost:3000/post/comment/${c._id}/react`,
                                               {
-                                                method: isLiked
-                                                  ? "DELETE"
-                                                  : "POST",
+                                                method: isLiked ? "DELETE" : "POST",
                                                 headers: {
-                                                  "Content-Type":
-                                                    "application/json",
+                                                  "Content-Type": "application/json",
                                                 },
                                                 body: JSON.stringify({
                                                   userId: user?.email,
@@ -1273,29 +1380,8 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                               }
                                             );
                                             const data = await res.json();
-                                            if (data.success) {
-                                              setCommentHearts((prev) => ({
-                                                ...prev,
-                                                [c._id]: data.count,
-                                              }));
-                                              setComments((prev) =>
-                                                prev.map((com) =>
-                                                  com._id === c._id
-                                                    ? {
-                                                      ...com,
-                                                      reactions: {
-                                                        ...com.reactions,
-                                                        heart: Array.isArray(
-                                                          data.hearts
-                                                        )
-                                                          ? data.hearts
-                                                          : [],
-                                                      },
-                                                    }
-                                                    : com
-                                                )
-                                              );
-                                            }
+                                            // Luôn gọi lại API lấy comment mới sau khi thả/gỡ tim
+                                            if (fetchCommentsRef.current) await fetchCommentsRef.current();
                                           } catch { }
                                         }}
                                       ></button>
@@ -1314,8 +1400,13 @@ const CommentModal: React.FC<CommentModalProps> = ({
                             alignItems: "center",
                           }}
                         >
-                          <div style={{ fontSize: 12, color: "#666" }}>
+                          <div style={{ fontSize: 12, color: "#666", display: "flex", alignItems: "center", gap: 8 }}>
                             {formatTime(c.createdAt, c._justNow)}
+                            {c.updatedAt && c.updatedAt !== c.createdAt && (
+                              <span style={{ fontStyle: "italic", fontSize: 11, color: "#999" }}>
+                                • đã chỉnh sửa
+                              </span>
+                            )}
                           </div>
                           <button
                             onClick={() => {
@@ -1353,25 +1444,43 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                 title={isLiked ? "Bỏ cảm xúc" : "Thả tim"}
                                 onClick={async () => {
                                   try {
-                                    const res = await fetch(
-                                      `http://localhost:3000/post/comment/${c._id}/react`,
-                                      {
-                                        method: isLiked ? "DELETE" : "POST",
-                                        headers: {
-                                          "Content-Type": "application/json",
-                                        },
-                                        body: JSON.stringify({
-                                          userId: user?.email,
-                                          reaction: "heart",
-                                        }),
-                                      }
-                                    );
+                                    // Pause polling during heart action
+                                    setPausePolling(true);
+                                    // Record this action to prevent polling override
+                                    recentHeartActions.current[c._id] = Date.now();
+
+                                    // Resume polling after 10 seconds
+                                    setTimeout(() => {
+                                      setPausePolling(false);
+                                      console.log('Resuming polling after heart action (button 2)');
+                                    }, 10000);
+                                    let res;
+                                    if (isLiked) {
+                                      // DELETE request với userId trong query string
+                                      res = await fetch(
+                                        `http://localhost:3000/post/comment/${c._id}/react?userId=${encodeURIComponent(user?.email || '')}`,
+                                        {
+                                          method: "DELETE",
+                                        }
+                                      );
+                                    } else {
+                                      // POST request với body
+                                      res = await fetch(
+                                        `http://localhost:3000/post/comment/${c._id}/react`,
+                                        {
+                                          method: "POST",
+                                          headers: { "Content-Type": "application/json" },
+                                          body: JSON.stringify({
+                                            userId: user?.email,
+                                            reaction: "heart",
+                                          }),
+                                        }
+                                      );
+                                    }
+
                                     const data = await res.json();
-                                    if (data.success) {
-                                      setCommentHearts((prev) => ({
-                                        ...prev,
-                                        [c._id]: data.count,
-                                      }));
+                                    console.log('Heart API response (button 2):', data); // Debug log
+                                    if (data.success && Array.isArray(data.hearts)) {
                                       setComments((prev) =>
                                         prev.map((com) =>
                                           com._id === c._id
@@ -1379,21 +1488,18 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                               ...com,
                                               reactions: {
                                                 ...com.reactions,
-                                                heart: Array.isArray(
-                                                  data.hearts
-                                                )
-                                                  ? data.hearts
-                                                  : [],
+                                                heart: data.hearts,
                                               },
                                             }
                                             : com
                                         )
                                       );
+                                      // Don't force fetch immediately, let polling handle it
                                     }
                                   } catch { }
                                 }}
                               >
-                                <div style={{ marginLeft: "420px" }}>
+                                <div style={{ marginLeft: "20px" }}>
                                   <HeartPlus strokeWidth={1} />{" "}
                                   {Array.isArray(latestComment.reactions?.heart)
                                     ? latestComment.reactions.heart.length
@@ -1405,7 +1511,7 @@ const CommentModal: React.FC<CommentModalProps> = ({
                         </div>
                         {/* replies: gọn lại, chỉ hiện khi mở */}
                         {(c.replies || []).length > 0 && (
-                          <div style={{ marginTop: 8, marginLeft: 46 }}>
+                          <div style={{ marginTop: 8, marginLeft: isNarrow ? 32 : 46 }}>
                             {!openReplies[c._id] ? (
                               <button
                                 style={{
@@ -1455,7 +1561,7 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                           key={replyKey}
                                           style={{
                                             display: "flex",
-                                            gap: 8,
+                                            gap: isNarrow ? 6 : 8,
                                             alignItems: "flex-start",
                                           }}
                                         >
@@ -1466,8 +1572,8 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                             }
                                             alt={latestReply.authorName}
                                             style={{
-                                              width: 28,
-                                              height: 28,
+                                              width: isNarrow ? 24 : 28,
+                                              height: isNarrow ? 24 : 28,
                                               borderRadius: 999,
                                             }}
                                           />
@@ -1475,10 +1581,13 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                             style={{
                                               background: "#fff",
                                               border: "1px solid #f0f0ff",
-                                              padding: 8,
-                                              borderRadius: 8,
+                                              padding: isNarrow ? 6 : 8,
+                                              borderRadius: isNarrow ? 6 : 8,
                                               position: "relative",
                                               width: "100%",
+                                              minWidth: 0,
+                                              wordWrap: "break-word",
+                                              overflowWrap: "break-word",
                                             }}
                                           >
                                             <div
@@ -1513,7 +1622,15 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                                     </span>
                                                   )}
                                               </div>
-                                              <div style={{ marginTop: 4 }}>
+                                              <div style={{
+                                                marginTop: 4,
+                                                wordWrap: "break-word",
+                                                wordBreak: "break-word",
+                                                whiteSpace: "pre-wrap",
+                                                overflowWrap: "break-word",
+                                                hyphens: "auto",
+                                                lineHeight: 1.4,
+                                              }}>
                                                 <span
                                                   style={{
                                                     fontWeight: 600,
@@ -1655,11 +1772,19 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                                   style={{
                                                     fontSize: 12,
                                                     color: "#666",
+                                                    display: "flex",
+                                                    alignItems: "center",
+                                                    gap: 8,
                                                   }}
                                                 >
                                                   {formatTime(
                                                     latestReply.createdAt,
                                                     latestReply._justNow
+                                                  )}
+                                                  {latestReply.updatedAt && latestReply.updatedAt !== latestReply.createdAt && (
+                                                    <span style={{ fontStyle: "italic", fontSize: 11, color: "#999" }}>
+                                                      • đã chỉnh sửa
+                                                    </span>
                                                   )}
                                                 </div>
                                                 <button
@@ -1703,95 +1828,104 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                                       : "Thả tim"
                                                   }
                                                   onClick={async () => {
-                                                    try {
-                                                      const isLiked =
-                                                        latestReply.reactions
-                                                          ?.heart &&
-                                                        latestReply.reactions.heart.includes(
-                                                          user?.email
-                                                        );
-                                                      const res = await fetch(
-                                                        `http://localhost:3000/post/comment/${c._id}/reply/${r._id}/react`,
-                                                        {
-                                                          method: isLiked
-                                                            ? "DELETE"
-                                                            : "POST",
-                                                          headers: {
-                                                            "Content-Type":
-                                                              "application/json",
-                                                          },
-                                                          body: JSON.stringify({
-                                                            userId: user?.email,
-                                                            reaction: "heart",
-                                                          }),
-                                                        }
-                                                      );
-                                                      const data =
-                                                        await res.json();
-                                                      if (data.success) {
-                                                        setComments((prev) =>
-                                                          prev.map((pc) => {
-                                                            if (
-                                                              pc._id !== c._id
-                                                            )
-                                                              return pc;
+                                                    // Pause polling during heart action
+                                                    setPausePolling(true);
+                                                    // Record this action to prevent polling override
+                                                    const replyKey = `${c._id}-${r._id}`;
+                                                    recentHeartActions.current[replyKey] = Date.now();
+
+                                                    // Resume polling after 10 seconds
+                                                    setTimeout(() => {
+                                                      setPausePolling(false);
+                                                      console.log('Resuming polling after reply heart action');
+                                                    }, 10000);
+
+                                                    // Chỉ cập nhật optimistic UI, không đồng bộ lại với backend ngay
+                                                    const isLiked = latestReply.reactions?.heart && latestReply.reactions.heart.includes(user?.email);
+                                                    setComments((prev) =>
+                                                      prev.map((pc) => {
+                                                        if (pc._id !== c._id) return pc;
+                                                        return {
+                                                          ...pc,
+                                                          replies: (pc.replies || []).map((rr: any) => {
+                                                            if (rr._id !== r._id) return rr;
+                                                            const newHearts = isLiked
+                                                              ? rr.reactions.heart.filter((email: string) => email !== user?.email)
+                                                              : [...(rr.reactions.heart || []), user?.email];
                                                             return {
-                                                              ...pc,
-                                                              replies: (
-                                                                pc.replies || []
-                                                              ).map(
-                                                                (rr: any) => {
-                                                                  if (
-                                                                    rr._id !==
-                                                                    r._id
-                                                                  )
-                                                                    return rr;
-                                                                  return {
-                                                                    ...rr,
-                                                                    reactions: {
-                                                                      ...rr.reactions,
-                                                                      heart:
-                                                                        Array.isArray(
-                                                                          data.hearts
-                                                                        )
-                                                                          ? data.hearts
-                                                                          : [],
-                                                                    },
-                                                                  };
-                                                                }
-                                                              ),
+                                                              ...rr,
+                                                              reactions: {
+                                                                ...rr.reactions,
+                                                                heart: newHearts,
+                                                              },
                                                             };
-                                                          })
+                                                          }),
+                                                        };
+                                                      })
+                                                    );
+                                                    try {
+                                                      let res;
+                                                      if (isLiked) {
+                                                        res = await fetch(
+                                                          `http://localhost:3000/post/comment/${c._id}/reply/${r._id}/react?userId=${user?.email}`,
+                                                          {
+                                                            method: "DELETE",
+                                                          }
+                                                        );
+                                                      } else {
+                                                        res = await fetch(
+                                                          `http://localhost:3000/post/comment/${c._id}/reply/${r._id}/react`,
+                                                          {
+                                                            method: "POST",
+                                                            headers: {
+                                                              "Content-Type": "application/json",
+                                                            },
+                                                            body: JSON.stringify({
+                                                              userId: user?.email,
+                                                              reaction: "heart",
+                                                            }),
+                                                          }
                                                         );
                                                       }
-                                                    } catch { }
+                                                      // KHÔNG cập nhật lại từ backend ngay
+                                                    } catch (err) {
+                                                      console.error("Reply heart error:", err);
+                                                    }
                                                   }}
                                                 >
                                                   <div
                                                     style={{
-                                                      marginLeft: "300px",
+                                                      display: "flex",
+                                                      alignItems: "center",
+                                                      gap: 6,
+                                                      marginLeft: 10,
+                                                      padding: "2px 8px",
+                                                      borderRadius: 16,
+                                                      background: latestReply.reactions?.heart && latestReply.reactions.heart.includes(user?.email) ? "#fee2e2" : "#f3f4f6",
+                                                      color: latestReply.reactions?.heart && latestReply.reactions.heart.includes(user?.email) ? "#e11d48" : "#888",
+                                                      fontWeight: 600,
+                                                      fontSize: 14,
+                                                      cursor: "pointer",
+                                                      userSelect: "none",
+                                                      transition: "background .2s, color .2s",
                                                     }}
                                                   >
-                                                    <HeartPlus strokeWidth={1} />{" "}
-                                                    {Array.isArray(
-                                                      latestReply.reactions
-                                                        ?.heart
-                                                    )
-                                                      ? latestReply.reactions
-                                                        .heart.length
-                                                      : 0}
+                                                    <HeartPlus strokeWidth={1} size={18} />
+                                                    <span>{Array.isArray(latestReply.reactions?.heart) ? latestReply.reactions.heart.length : 0}</span>
                                                   </div>
                                                 </button>
                                                 {user?.email === r.authorId && (
                                                   <div
                                                     style={{
                                                       position: "relative",
+                                                      overflow: "visible",
                                                     }}
                                                     onClick={(e) =>
                                                       e.stopPropagation()
                                                     }
                                                   >
                                                     <button
+                                                      data-dropdown-menu
                                                       aria-label="Options"
                                                       onClick={(e) => {
                                                         e.stopPropagation();
@@ -1814,18 +1948,22 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                                     </button>
                                                     {openMenu === replyKey && (
                                                       <div
+                                                        data-dropdown-menu
                                                         style={{
                                                           position: "absolute",
-                                                          right: 0,
-                                                          top: 26,
+                                                          left: "50%",
+                                                          top: "-70px",
+                                                          transform: "translateX(-50%)",
                                                           background: "#fff",
                                                           border:
-                                                            "1px solid #eee",
+                                                            "1px solid #ddd",
                                                           boxShadow:
-                                                            "0 6px 18px rgba(0,0,0,0.08)",
+                                                            "0 8px 25px rgba(0,0,0,0.15)",
                                                           borderRadius: 8,
-                                                          overflow: "hidden",
-                                                          zIndex: 200,
+                                                          overflow: "visible",
+                                                          zIndex: 9999,
+                                                          minWidth: "140px",
+                                                          whiteSpace: "nowrap",
                                                         }}
                                                         onClick={(e) =>
                                                           e.stopPropagation()
@@ -1857,7 +1995,7 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                                             color: "#6366f1",
                                                           }}
                                                         >
-                                                          Sửa trả lời
+                                                          Sửa
                                                         </button>
                                                         <button
                                                           onClick={async (
@@ -1895,13 +2033,6 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                                               if (
                                                                 data.success
                                                               ) {
-                                                                setCommentHearts(
-                                                                  (prev) => ({
-                                                                    ...prev,
-                                                                    [c._id]:
-                                                                      data.count,
-                                                                  })
-                                                                );
                                                                 setComments(
                                                                   (prev) =>
                                                                     prev.map(
@@ -1911,18 +2042,13 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                                                           c._id
                                                                         )
                                                                           return com;
+                                                                        // Xóa reply khỏi danh sách replies
+                                                                        const updatedReplies = (com.replies || []).filter(
+                                                                          (reply: any) => reply._id !== r._id
+                                                                        );
                                                                         return {
                                                                           ...com,
-                                                                          reactions:
-                                                                          {
-                                                                            ...com.reactions,
-                                                                            heart:
-                                                                              Array.isArray(
-                                                                                data.hearts
-                                                                              )
-                                                                                ? data.hearts
-                                                                                : [],
-                                                                          },
+                                                                          replies: updatedReplies,
                                                                         };
                                                                       }
                                                                     )
@@ -2035,6 +2161,11 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                                       border:
                                                         "1px solid #e6e6ef",
                                                       fontSize: 15,
+                                                      resize: "vertical",
+                                                      minHeight: "60px",
+                                                      wordWrap: "break-word",
+                                                      whiteSpace: "pre-wrap",
+                                                      overflowWrap: "break-word",
                                                     }}
                                                   />
                                                   <div
@@ -2093,7 +2224,13 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                                         fontWeight: 700,
                                                       }}
                                                     >
-                                                      {r.authorName}
+                                                      {(() => {
+                                                        console.log("Reply form - activeReplyTo:", activeReplyTo);
+                                                        console.log("Reply form - replyKey:", replyKey);
+                                                        console.log("Reply form - r.authorName:", r.authorName);
+                                                        console.log("Reply form - r._id:", r._id);
+                                                        return r.authorName;
+                                                      })()}
                                                     </span>
                                                   </div>
                                                   <form
@@ -2212,7 +2349,7 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                                       </div>
                                                       <React.Suspense fallback={<div>Đang tải emoji...</div>}>
                                                         <EmojiPicker
-                                                          onEmojiClick={(e, emojiObj) => {
+                                                          onEmojiClick={(e, _emojiObj) => {
                                                             setReplyText((prev) => prev + (e.emoji || ""));
                                                             // Không đóng picker khi chọn emoji, chỉ đóng khi nhấn nút Đóng
                                                           }}
@@ -2269,7 +2406,7 @@ const CommentModal: React.FC<CommentModalProps> = ({
                         )}
                         {activeReplyTo === c._id && (
                           <>
-                            <div style={{ marginTop: 8, marginLeft: 46 }}>
+                            <div style={{ marginTop: 8, marginLeft: isNarrow ? 32 : 46 }}>
                               <div
                                 style={{
                                   marginBottom: 6,
@@ -2283,30 +2420,14 @@ const CommentModal: React.FC<CommentModalProps> = ({
                               >
                                 Đang trả lời cho{" "}
                                 <span style={{ fontWeight: 700 }}>
-                                  {(() => {
-                                    if (
-                                      typeof activeReplyTo === "string" &&
-                                      activeReplyTo.startsWith("reply-")
-                                    ) {
-                                      const parts = activeReplyTo.split("-");
-                                      const replyId = parts.slice(2).join("-");
-                                      const reply = (c.replies || []).find(
-                                        (r: any) => r._id === replyId
-                                      );
-                                      return reply
-                                        ? reply.authorName
-                                        : c.authorName;
-                                    }
-                                    // Nếu đang trả lời comment cha
-                                    return c.authorName;
-                                  })()}
+                                  {c.authorName}
                                 </span>
                               </div>
                               <form
                                 onSubmit={(e) => submitReply(c._id, e)}
                                 style={{ display: "flex", gap: 8 }}
                               >
-                                <input
+                                <textarea
                                   value={replyText}
                                   onChange={(e) => setReplyText(e.target.value)}
                                   placeholder={
@@ -2320,6 +2441,13 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                     padding: 8,
                                     borderRadius: 8,
                                     border: "1px solid #e6e6ef",
+                                    resize: "vertical",
+                                    minHeight: "40px",
+                                    maxHeight: "100px",
+                                    wordWrap: "break-word",
+                                    whiteSpace: "pre-wrap",
+                                    overflowWrap: "break-word",
+                                    fontFamily: "inherit",
                                   }}
                                 />
                                 <button
@@ -2379,7 +2507,7 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                         </div>
                                         <React.Suspense fallback={<div>Đang tải emoji...</div>}>
                                           <EmojiPicker
-                                            onEmojiClick={(e, emojiObj) => {
+                                            onEmojiClick={(e, _emojiObj) => {
                                               setReplyText((prev) => prev + (e.emoji || ""));
                                               // Không đóng picker khi chọn emoji, chỉ đóng khi nhấn nút Đóng
                                             }}
@@ -2434,9 +2562,10 @@ const CommentModal: React.FC<CommentModalProps> = ({
             style={{
               display: "flex",
               flexDirection: "column",
-              gap: 8,
+              gap: isNarrow ? 6 : 8,
               alignItems: "flex-end",
               position: "relative",
+              padding: isNarrow ? "8px 12px" : "12px 16px",
             }}
           >
             <div
@@ -2444,10 +2573,10 @@ const CommentModal: React.FC<CommentModalProps> = ({
                 display: "flex",
                 alignItems: "center",
                 width: "100%",
-                gap: 8,
+                gap: isNarrow ? 6 : 8,
               }}
             >
-              <input
+              <textarea
                 value={newComment}
                 onChange={(e) => setNewComment(e.target.value)}
                 placeholder={
@@ -2458,10 +2587,17 @@ const CommentModal: React.FC<CommentModalProps> = ({
                 disabled={!user}
                 style={{
                   flex: 1,
-                  padding: 10,
-                  borderRadius: 999,
+                  padding: isNarrow ? 8 : 10,
+                  borderRadius: 16,
                   border: "1px solid #e6e6ef",
-                  fontSize: 15,
+                  fontSize: isNarrow ? 14 : 15,
+                  resize: "vertical",
+                  minHeight: "44px",
+                  maxHeight: "120px",
+                  wordWrap: "break-word",
+                  whiteSpace: "pre-wrap",
+                  overflowWrap: "break-word",
+                  fontFamily: "inherit",
                 }}
               />
               <button
@@ -2529,48 +2665,7 @@ const CommentModal: React.FC<CommentModalProps> = ({
                 Gửi
               </button>
             </div>
-            {/*Phần emoji bên trong*/}
-            {/* {showEmoji && (
-              <div
-                ref={emojiPickerRef}
-                style={{
-                  position: "absolute",
-                  bottom: 50,
-                  right: 0,
-                  zIndex: 100,
-                  background: "#fff",
-                  border: "1px solid #eee",
-                  borderRadius: 8,
-                  padding: 8,
-                  boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
-                }}
-              >
-                <React.Suspense fallback={<div>Đang tải emoji...</div>}>
-                  <EmojiPicker
-                    onEmojiClick={(emojiData: any) => {
-                      setNewComment(
-                        (c) => c + (emojiData.emoji || emojiData.unified || "")
-                      );
-                    }}
-                  />
-                  <div style={{ textAlign: "right", marginTop: 6 }}>
-                    <button
-                      type="button"
-                      style={{
-                        background: "#eee",
-                        border: "none",
-                        borderRadius: 6,
-                        padding: "4px 12px",
-                        cursor: "pointer",
-                      }}
-                      onClick={() => setShowEmoji(false)}
-                    >
-                      Đóng
-                    </button>
-                  </div>
-                </React.Suspense>
-              </div>
-            )} */}
+
             {previewImages.length > 0 && (
               <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
                 {previewImages.map((p, idx) => (

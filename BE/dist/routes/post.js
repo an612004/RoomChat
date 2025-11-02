@@ -35,15 +35,47 @@ router.post('/comment/:id/react', async (req, res) => {
     try {
         const { id } = req.params;
         const { userId, reaction } = req.body;
-        if (!userId || !reaction)
+        if (!userId || reaction !== 'heart')
             return res.status(400).json({ success: false });
         const comment = await Comment_1.default.findById(id);
         if (!comment)
             return res.status(404).json({ success: false });
         comment.reactions = comment.reactions || {};
-        comment.reactions[reaction] = (comment.reactions[reaction] || 0) + 1;
+        comment.reactions.heart = comment.reactions.heart || [];
+        if (!comment.reactions.heart.includes(userId)) {
+            comment.reactions.heart.push(userId);
+            await comment.save();
+        }
+        return res.json({ success: true, count: comment.reactions.heart.length });
+    }
+    catch (err) {
+        return res.status(500).json({ success: false });
+    }
+});
+// Cảm xúc cho reply của bình luận
+router.post('/comment/:commentId/reply/:replyId/react', async (req, res) => {
+    try {
+        const { commentId, replyId } = req.params;
+        const { userId, reaction } = req.body;
+        if (!userId || reaction !== 'heart')
+            return res.status(400).json({ success: false });
+        const comment = await Comment_1.default.findById(commentId);
+        if (!comment)
+            return res.status(404).json({ success: false });
+        comment.replies = comment.replies || [];
+        const reply = comment.replies.find(r => r._id?.toString() === replyId);
+        if (!reply)
+            return res.status(404).json({ success: false });
+        reply.reactions = reply.reactions || {};
+        reply.reactions.heart = reply.reactions.heart || [];
+        if (!reply.reactions.heart.includes(userId)) {
+            reply.reactions.heart.push(userId);
+        }
+        else {
+            reply.reactions.heart = reply.reactions.heart.filter((id) => id !== userId);
+        }
         await comment.save();
-        return res.json({ success: true, reactions: comment.reactions });
+        return res.json({ success: true, hearts: reply.reactions.heart });
     }
     catch (err) {
         return res.status(500).json({ success: false });
@@ -208,12 +240,37 @@ router.post('/:id/like', async (req, res) => {
 router.post('/:id/share', async (req, res) => {
     try {
         const { id } = req.params;
+        const { userId, content, privacy } = req.body;
         const post = await Post_1.default.findById(id);
         if (!post)
             return res.status(404).json({ success: false });
         post.shares += 1;
         await post.save();
-        return res.json({ success: true, shares: post.shares });
+        // Tạo post chia sẻ mới
+        const sharedPost = new Post_1.default({
+            authorId: userId,
+            authorName: req.body.authorName || "",
+            authorAvatar: req.body.authorAvatar || "",
+            content: content,
+            images: [],
+            videos: [],
+            likes: [],
+            shares: 0,
+            createdAt: new Date(),
+            originalPost: {
+                _id: post._id,
+                authorId: post.authorId,
+                authorName: post.authorName,
+                authorAvatar: post.authorAvatar,
+                content: post.content,
+                images: post.images,
+                videos: post.videos,
+                createdAt: post.createdAt,
+            },
+            privacy: privacy || "public"
+        });
+        await sharedPost.save();
+        return res.json({ success: true, sharedPost });
     }
     catch (err) {
         return res.status(500).json({ success: false });

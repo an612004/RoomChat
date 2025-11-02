@@ -57,17 +57,24 @@ const ShareModal: React.FC<ShareModalProps> = ({
             position: "absolute",
             top: 14,
             right: 14,
-            fontSize: 24,
-            background: "none",
-            border: "none",
+            background: "#f6f7fb",
+            border: "1px solid #e5e7eb",
             color: "#222",
+            borderRadius: 8,
+            padding: "6px 18px",
+            fontWeight: 600,
+            fontSize: 16,
             cursor: "pointer",
-            lineHeight: 1,
+            zIndex: 100,
+            boxShadow: "0 2px 8px #0001",
+            transition: "background .2s, color .2s",
           }}
+          onMouseOver={e => { e.currentTarget.style.background = '#e5e7eb'; e.currentTarget.style.color = '#2563eb'; }}
+          onMouseOut={e => { e.currentTarget.style.background = '#f6f7fb'; e.currentTarget.style.color = '#222'; }}
           onClick={onClose}
           aria-label="Đóng"
         >
-          ×
+          X
         </button>
         <h2
           style={{
@@ -141,12 +148,49 @@ const ShareModal: React.FC<ShareModalProps> = ({
           </button>
           {showEmoji && (
             <div
-              style={{ marginBottom: 12, maxWidth: "100%", overflowX: "auto" }}
+              style={{
+                position: "fixed",
+                top: "50%",
+                left: "calc(50% + 220px)",
+                transform: "translateY(-50%)",
+                zIndex: 99999,
+                background: "#fff",
+                borderRadius: 12,
+                boxShadow: "0 8px 32px #0002",
+                padding: 10,
+                minWidth: 260,
+                maxWidth: 340,
+                border: "1px solid #e5e7eb",
+              }}
             >
+              <button
+                style={{
+                  position: "absolute",
+                  top: 8,
+                  right: 8,
+                  background: "#f6f7fb",
+                  border: "1px solid #e5e7eb",
+                  color: "#222",
+                  borderRadius: 8,
+                  padding: "4px 14px",
+                  fontWeight: 600,
+                  fontSize: 15,
+                  cursor: "pointer",
+                  zIndex: 100,
+                  boxShadow: "0 2px 8px #0001",
+                  transition: "background .2s, color .2s",
+                }}
+                onMouseOver={e => { e.currentTarget.style.background = '#e5e7eb'; e.currentTarget.style.color = '#2563eb'; }}
+                onMouseOut={e => { e.currentTarget.style.background = '#f6f7fb'; e.currentTarget.style.color = '#222'; }}
+                onClick={() => setShowEmoji(false)}
+                aria-label="Đóng emoji"
+              >
+                Đóng
+              </button>
               <EmojiPicker
                 onEmojiClick={(e: any) => {
                   onContentChange(shareContent + (e.emoji || ""));
-                  setShowEmoji(false);
+                  // Không đóng form emoji, cho phép chọn nhiều emoji liên tục
                 }}
               />
             </div>

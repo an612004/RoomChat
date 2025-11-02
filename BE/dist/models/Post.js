@@ -45,6 +45,7 @@ const PostSchema = new mongoose_1.Schema({
     videoPublicIds: [{ type: String }],
     likes: [{ type: String }],
     shares: { type: Number, default: 0 },
-    createdAt: { type: Date, default: Date.now }
+    createdAt: { type: Date, default: Date.now },
+    originalPost: { type: mongoose_1.Schema.Types.Mixed, default: null }
 });
 exports.default = mongoose_1.default.model('Post', PostSchema);

@@ -12,7 +12,17 @@ export interface IPost extends Document {
   likes: string[]; // userId array
   shares: number;
   createdAt: Date;
-  originalPost?: any;
+  privacy?: string;
+  sharedPost?: {
+    originalPostId: string;
+    originalAuthorId: string;
+    originalAuthorName: string;
+    originalAuthorAvatar?: string;
+    originalContent: string;
+    originalImages?: string[];
+    originalVideos?: string[];
+    originalCreatedAt: Date;
+  };
 }
 
 const PostSchema: Schema = new Schema({
@@ -27,7 +37,17 @@ const PostSchema: Schema = new Schema({
   likes: [{ type: String }],
   shares: { type: Number, default: 0 },
   createdAt: { type: Date, default: Date.now },
-  originalPost: { type: Schema.Types.Mixed, default: null }
+  privacy: { type: String, default: 'public' },
+  sharedPost: {
+    originalPostId: { type: String },
+    originalAuthorId: { type: String },
+    originalAuthorName: { type: String },
+    originalAuthorAvatar: { type: String },
+    originalContent: { type: String },
+    originalImages: [{ type: String }],
+    originalVideos: [{ type: String }],
+    originalCreatedAt: { type: Date }
+  }
 });
 
 export default mongoose.model<IPost>('Post', PostSchema);

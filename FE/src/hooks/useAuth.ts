@@ -6,6 +6,10 @@ interface User {
   avatar: string;
   provider?: string;
   bio?: string;
+  followers?: string[];
+  following?: string[];
+  _id?: string;
+  id?: string;
 }
 
 interface AuthState {
@@ -65,11 +69,17 @@ export default function useAuth() {
     });
   };
 
+  const setUser = (user: User) => {
+    setAuthState((prev) => ({ ...prev, user }));
+    localStorage.setItem('user', JSON.stringify(user));
+  };
+
   return {
     user: authState.user,
     isLoggedIn: authState.isLoggedIn,
     token: authState.token,
     login,
-    logout
+    logout,
+    setUser
   };
 }
