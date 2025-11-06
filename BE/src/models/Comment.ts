@@ -6,6 +6,7 @@ export interface IComment extends Document {
   authorName: string;
   authorAvatar?: string;
   content: string;
+  stickers?: Array<{ url: string; name: string }>;
   createdAt: Date;
   updatedAt?: Date;
   images?: string[];
@@ -18,6 +19,7 @@ export interface IComment extends Document {
     authorName: string;
     authorAvatar?: string;
     content: string;
+    stickers?: Array<{ url: string; name: string }>;
     emoji?: string;
     images?: string[];
     videos?: string[];
@@ -33,7 +35,14 @@ const CommentSchema: Schema = new Schema({
   authorId: { type: String, required: true },
   authorName: { type: String, required: true },
   authorAvatar: { type: String },
-  content: { type: String, required: true },
+  content: { type: String, default: '' },
+  stickers: { 
+    type: [{
+      url: { type: String, required: true },
+      name: { type: String, required: true }
+    }], 
+    default: [] 
+  },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date },
   images: { type: [String], default: [] },
@@ -47,6 +56,13 @@ const CommentSchema: Schema = new Schema({
       authorName: String,
       authorAvatar: String,
       content: String,
+      stickers: { 
+        type: [{
+          url: { type: String, required: true },
+          name: { type: String, required: true }
+        }], 
+        default: [] 
+      },
       emoji: String,
       images: { type: [String], default: [] },
       videos: { type: [String], default: [] },

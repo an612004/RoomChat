@@ -1,3 +1,4 @@
+import { Pencil } from 'lucide-react';
 // Hiển thị chi tiết user từ id/email nếu cần
 const FollowerItem: React.FC<{ userId: string }> = ({ userId }) => {
   const [info, setInfo] = React.useState<any>(null);
@@ -43,51 +44,57 @@ import React, { useState, useEffect } from 'react';
 import './Profile.css';
 import useAuth from "../../hooks/useAuth";
 import Header from '../Header';
+import { useUserSync } from '../../contexts/UserSyncContext';
+
+import ProfilePosts from './ProfilePosts';
+import ProfilePostsDebug from './ProfilePostsDebug';
 
 const Profile = () => {
   const [showFollowers, setShowFollowers] = useState(false);
   const [showFollowing, setShowFollowing] = useState(false);
   const { user, setUser } = useAuth();
+  const { triggerRefresh } = useUserSync();
   const [showEditBio, setShowEditBio] = useState(false);
   const [bioInput, setBioInput] = useState(user?.bio || "");
   const [savingBio, setSavingBio] = useState(false);
   const [bioError, setBioError] = useState<string | null>(null);
   const [bioSuccess, setBioSuccess] = useState<string | null>(null);
-  const [posts, setPosts] = useState<any[]>([]);
 
+  // States cho chỉnh sửa profile
+  const [showEditName, setShowEditName] = useState(false);
+  const [nameInput, setNameInput] = useState(user?.name || "");
+  const [savingName, setSavingName] = useState(false);
+  const [nameError, setNameError] = useState<string | null>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [uploadingCover, setUploadingCover] = useState(false);
+
+  // Fetch user data một lần khi component mount
   useEffect(() => {
-    // Luôn lấy user mới nhất từ backend khi vào trang profile
-    const fetchUser = async () => {
-      if (!user || !(user.id || user._id || user.email)) return;
-      const userId = user.id || user._id || user.email;
+    const fetchLatestUserData = async () => {
+      if (!user?.email) return;
+
       try {
-        const res = await fetch(`http://localhost:3000/user/me/${userId}`);
+        const res = await fetch(`http://localhost:3000/user/me/${user.email}`);
         const data = await res.json();
         if (data.success && data.user) {
+          console.log("🔄 Fetched latest user data on mount:", data.user);
           setUser(data.user);
         }
-        if (data.success && data.user) {
-          console.log("FOLLOWING LIST:", data.user.following);
-          setUser(data.user);
-        }
-
-      } catch { }
+      } catch (error) {
+        console.error("❌ Error fetching user data:", error);
+      }
     };
-    fetchUser();
-  }, []);
 
+    // Chỉ fetch một lần khi component mount
+    fetchLatestUserData();
+  }, []); // Empty dependency để chỉ chạy một lần
+
+  // Update nameInput khi user thay đổi
   useEffect(() => {
-    const fetchPosts = async () => {
-      try {
-        const res = await fetch('http://localhost:3000/post');
-        const data = await res.json();
-        if (data.success) setPosts(data.posts);
-      } catch { }
-    };
-    fetchPosts();
-  }, []);
+    setNameInput(user?.name || "");
+  }, [user?.name]);
 
-  const userPosts = posts.filter(p => p.authorId === user?.email);
+
   useEffect(() => {
     if (!user || !(user.id || user._id || user.email)) return;
     const userId = user.id || user._id || user.email;
@@ -98,6 +105,130 @@ const Profile = () => {
       });
   }, [user?.id]);
 
+  // Function cập nhật tên
+  const updateName = async () => {
+    if (!nameInput.trim()) {
+      setNameError("Tên không được để trống");
+      return;
+    }
+    if (nameInput.trim().length > 10) {
+      setNameError("Tên không được vượt quá 10 ký tự");
+      return;
+    }
+    setSavingName(true);
+    setNameError(null);
+    try {
+      const res = await fetch('http://localhost:3000/user/update-profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: user?.email,
+          name: nameInput.trim()
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        console.log("✅ Name updated successfully:", data.user);
+        setUser(data.user); // Sử dụng data từ server thay vì merge local
+        triggerRefresh(); // 🔄 Trigger refresh cho các component khác
+        setShowEditName(false);
+      } else {
+        setNameError(data.message || "Có lỗi xảy ra");
+      }
+    } catch (error) {
+      setNameError("Không thể cập nhật tên");
+    } finally {
+      setSavingName(false);
+    }
+  };
+
+  // Function cập nhật avatar
+  const updateAvatar = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert('Vui lòng chọn file ảnh');
+      return;
+    }
+
+    setUploadingAvatar(true);
+    try {
+      const formData = new FormData();
+      formData.append('images', file);
+
+      const uploadRes = await fetch('http://localhost:3000/upload', {
+        method: 'POST',
+        body: formData
+      });
+      const uploadData = await uploadRes.json();
+
+      if (uploadData.success && uploadData.imageUrls?.[0]) {
+        const res = await fetch('http://localhost:3000/user/update-profile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: user?.email,
+            avatar: uploadData.imageUrls[0]
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          console.log("✅ Avatar updated successfully:", data.user);
+          setUser(data.user); // Sử dụng data từ server
+          triggerRefresh(); // 🔄 Trigger refresh cho các component khác
+        }
+      }
+    } catch (error) {
+      alert('Không thể cập nhật ảnh đại diện');
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
+  // Function cập nhật ảnh bìa
+  const updateCoverPhoto = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert('Vui lòng chọn file ảnh');
+      return;
+    }
+
+    setUploadingCover(true);
+    try {
+      const formData = new FormData();
+      formData.append('images', file);
+
+      const uploadRes = await fetch('http://localhost:3000/upload', {
+        method: 'POST',
+        body: formData
+      });
+      const uploadData = await uploadRes.json();
+
+      if (uploadData.success && uploadData.imageUrls?.[0]) {
+        const res = await fetch('http://localhost:3000/user/update-profile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: user?.email,
+            coverPhoto: uploadData.imageUrls[0]
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          console.log("✅ Cover photo updated successfully:", data.user);
+          setUser(data.user); // Sử dụng data từ server
+        }
+      }
+    } catch (error) {
+      alert('Không thể cập nhật ảnh bìa');
+    } finally {
+      setUploadingCover(false);
+    }
+  };
+
   return (
     <div className="profile-container">
       <Header />
@@ -105,12 +236,21 @@ const Profile = () => {
         <div style={{ width: '100%', maxWidth: 900 }}>
           {/* Cover photo */}
           <div className="cover-photo" style={{ position: 'relative', borderRadius: '18px 18px 0 0', overflow: 'hidden', boxShadow: '0 2px 12px #0001' }}>
-            <img
+            {/* <img
               src={(user as any)?.coverPhoto || "/default-cover.jpg"}
-              alt="Cover"
+              // alt="Cover"
               className="cover-image"
-            />
-            <button className="edit-cover-btn" style={{ position: 'absolute', right: 24, bottom: 18, background: '#fff', color: '#222', borderRadius: 8, padding: '6px 16px', boxShadow: '0 2px 8px #0002', border: 'none', fontWeight: 600, cursor: 'pointer' }}>Chỉnh sửa ảnh bìa</button>
+            /> */}
+            <label className="edit-cover-btn" style={{ position: 'absolute', right: 24, bottom: 18, background: '#fff', color: '#222', borderRadius: 8, padding: '6px 16px', boxShadow: '0 2px 8px #0002', border: 'none', fontWeight: 600, cursor: 'pointer', display: 'inline-block' }}>
+              {uploadingCover ? "Đang tải..." : "Chỉnh sửa ảnh bìa"}
+              <input
+                type="file"
+                accept="image/*"
+                style={{ display: 'none' }}
+                onChange={updateCoverPhoto}
+                disabled={uploadingCover}
+              />
+            </label>
           </div>
           {/* Profile card */}
           <div style={{ background: '#fff', borderRadius: '0 0 18px 18px', boxShadow: '0 2px 12px #0001', padding: '0 32px 32px 32px', margin: '0 auto', position: 'relative', top: -60 }}>
@@ -123,11 +263,127 @@ const Profile = () => {
                   className="profile-avatar"
                   style={{ width: 180, height: 180, borderRadius: '50%', border: '6px solid #fff', boxShadow: '0 2px 10px #0002', objectFit: 'cover' }}
                 />
-                <button className="edit-avatar-btn" style={{ position: 'absolute', bottom: 12, right: 12, background: '#fff', borderRadius: '50%', width: 38, height: 38, boxShadow: '0 2px 8px #0002', border: 'none', fontWeight: 600, cursor: 'pointer', fontSize: 20 }}>📷</button>
+                <label className="edit-avatar-btn" style={{ position: 'absolute', bottom: 12, right: 12, background: '#fff', borderRadius: '50%', width: 38, height: 38, boxShadow: '0 2px 8px #0002', border: 'none', fontWeight: 600, cursor: 'pointer', fontSize: 20, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {uploadingAvatar ? "⏳" : "📷"}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={updateAvatar}
+                    disabled={uploadingAvatar}
+                  />
+                </label>
               </div>
               {/* Info */}
               <div style={{ marginTop: 110, textAlign: 'center', width: '100%' }}>
-                <h1 className="profile-name" style={{ fontSize: '2.2rem', fontWeight: 700, color: '#222', marginBottom: 8 }}>{user?.name}</h1>
+                <div style={{ position: 'relative', display: 'inline-block', marginBottom: 8 }}>
+                  {!showEditName ? (
+                    <>
+                      <h1 className="profile-name" style={{ fontSize: '2.2rem', fontWeight: 700, color: '#222', margin: 0 }}>{user?.name}</h1>
+                      <button
+                        onClick={() => {
+                          setShowEditName(true);
+                          setNameInput(user?.name || "");
+                        }}
+                        style={{
+                          position: 'absolute',
+                          top: -5,
+                          right: -30,
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          fontSize: 18,
+                          opacity: 0.7
+                        }}
+                      >
+                        <Pencil strokeWidth={1} />
+                      </button>
+                    </>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }}>
+                      <div style={{ position: 'relative', width: 'auto' }}>
+                        <input
+                          type="text"
+                          value={nameInput}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            setNameInput(value);
+                            // Real-time validation
+                            if (value.trim().length > 10) {
+                              setNameError("Tên không được vượt quá 10 ký tự");
+                            } else if (nameError && value.trim().length <= 10) {
+                              setNameError(null);
+                            }
+                          }}
+                          style={{
+                            fontSize: '2.2rem',
+                            fontWeight: 700,
+                            textAlign: 'center',
+                            border: nameInput.trim().length > 10 ? '2px solid #ff4444' : '2px solid #1877f2',
+                            borderRadius: 8,
+                            padding: '4px 12px',
+                            background: '#fff',
+                            paddingRight: '50px'
+                          }}
+                          maxLength={15}
+                          disabled={savingName}
+                          placeholder="Nhập tên..."
+                        />
+                        <span style={{
+                          position: 'absolute',
+                          right: '12px',
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          fontSize: '14px',
+                          color: nameInput.trim().length > 10 ? '#ff4444' : '#888',
+                          fontWeight: 500,
+                          pointerEvents: 'none'
+                        }}>
+                          {nameInput.trim().length}/10
+                        </span>
+                      </div>
+                      {nameError && <div style={{ color: 'red', fontSize: 14, fontWeight: 600 }}>{nameError}</div>}
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button
+                          onClick={updateName}
+                          disabled={savingName || nameInput.trim().length > 10 || !nameInput.trim()}
+                          style={{
+                            background: (savingName || nameInput.trim().length > 10 || !nameInput.trim()) ? '#ccc' : '#1877f2',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: 6,
+                            padding: '6px 16px',
+                            cursor: (savingName || nameInput.trim().length > 10 || !nameInput.trim()) ? 'not-allowed' : 'pointer',
+                            fontSize: 14,
+                            fontWeight: 600,
+                            opacity: (savingName || nameInput.trim().length > 10 || !nameInput.trim()) ? 0.6 : 1
+                          }}
+                        >
+                          {savingName ? "Đang lưu..." : "Lưu"}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowEditName(false);
+                            setNameError(null);
+                            setNameInput(user?.name || "");
+                          }}
+                          style={{
+                            background: '#e4e6ea',
+                            color: '#050505',
+                            border: 'none',
+                            borderRadius: 6,
+                            padding: '6px 16px',
+                            cursor: 'pointer',
+                            fontSize: 14,
+                            fontWeight: 600
+                          }}
+                        >
+                          Hủy
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
                 <p className="profile-email" style={{ color: '#65676b', marginBottom: 8 }}>{user?.email}</p>
                 {/* Người theo dõi và đang theo dõi */}
                 <div style={{ display: 'flex', justifyContent: 'center', gap: 24, margin: '12px 0' }}>
@@ -434,75 +690,15 @@ const Profile = () => {
                     )}
                   </div>
                 </div>
-                {/* User's posts section */}
-                <div style={{ width: '100%', margin: '0 auto', marginTop: 32 }}>
-                  <div style={{ background: '#fff', borderRadius: 12, boxShadow: '0 2px 8px #0002', padding: '20px 24px' }}>
-                    <h2 style={{ fontSize: '1.1rem', fontWeight: 600, color: '#222', marginBottom: 8 }}>Bài viết của bạn</h2>
-                    {userPosts.length === 0 ? (
-                      <p style={{ color: '#888' }}>Bạn chưa đăng bài viết nào.</p>
-                    ) : (
-                      userPosts.map(post => {
-                        return (
-                          <div key={post._id} className="post-item" style={{ background: '#fff', border: '1px solid #e4e6eb', borderRadius: 20, boxShadow: '0 4px 24px #b6b8c355', padding: '28px 24px 20px 24px', marginBottom: 28, transition: 'box-shadow .18s', width: '100%', position: 'relative', overflow: 'hidden' }}>
-                            <div className="post-header" style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8, justifyContent: 'flex-start' }}>
-                              <img className="post-header-avatar" src={user?.avatar || '/default-avatar.png'} alt={user?.name} style={{ width: 40, height: 40, borderRadius: '50%', boxShadow: '0 1px 6px rgba(0,0,0,0.08)' }} />
-                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-                                <div style={{ fontWeight: 700, fontSize: 15, color: '#1b1b1b' }}>{user?.name}</div>
-                                <div style={{ fontSize: 12, color: '#65676b' }}>{new Date(post.createdAt).toLocaleString('vi-VN')}</div>
-                              </div>
-                            </div>
-                            <div style={{ margin: '18px 0', fontSize: 18, lineHeight: 1.7, color: '#222', wordBreak: 'break-word' }}>{post.content}</div>
-                            {/* Images */}
-                            {post.images && post.images.length > 0 && (
-                              <div style={{ display: 'grid', gap: 8, margin: '18px 0 0 0', gridTemplateColumns: post.images.length === 1 ? '1fr' : post.images.length === 2 ? '1fr 1fr' : '2fr 1fr', gridTemplateRows: post.images.length <= 2 ? '1fr' : post.images.length === 3 ? '1fr 1fr' : '1fr 1fr', gridAutoFlow: 'dense', justifyContent: 'center', alignItems: 'center', maxWidth: '700px', minHeight: '340px', position: 'relative' }}>
-                                {post.images.map((img: string, idx: number) => {
-                                  const src = img.startsWith('/uploads/') ? `http://localhost:3000${img}` : img;
-                                  let style: React.CSSProperties = {
-                                    width: '100%',
-                                    height: post.images.length === 1 ? '420px' : post.images.length === 2 ? '340px' : idx === 0 ? '340px' : '165px',
-                                    objectFit: 'cover',
-                                    borderRadius: 16,
-                                    boxShadow: '0 4px 24px #b6b8c355',
-                                    cursor: 'zoom-in',
-                                    gridColumn: post.images.length === 1 ? '1/2' : post.images.length === 2 ? (idx === 0 ? '1/2' : '2/3') : (idx === 0 ? '1/2' : '2/3'),
-                                    gridRow: post.images.length <= 2 ? '1/2' : (idx === 0 ? '1/3' : (idx === 1 ? '1/2' : '2/3')),
-                                    position: 'relative',
-                                  };
-                                  if (idx > 3) return null;
-                                  return (
-                                    <img key={idx} className="post-img" src={src} alt={`post-img-${idx}`} style={style} />
-                                  );
-                                })}
-                              </div>
-                            )}
-                            {/* Videos */}
-                            {post.videos && post.videos.length > 0 && (
-                              <div style={{ display: 'flex', gap: 16, margin: '18px 0 0 0', flexWrap: 'wrap', justifyContent: 'center' }}>
-                                {post.videos.map((vid: string, idx: number) => {
-                                  const src = vid.startsWith('/uploads/') ? `http://localhost:3000${vid}` : vid;
-                                  return (
-                                    <video key={idx} src={src} controls style={{ width: 340, height: 340, borderRadius: 16, boxShadow: '0 4px 24px #b6b8c355', background: '#000' }} />
-                                  );
-                                })}
-                              </div>
-                            )}
-                            <div style={{ display: 'flex', gap: 24, alignItems: 'center', marginBottom: 8 }}>
-                              <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#e11d48', fontWeight: 700, fontSize: 17, background: '#f3f4f6', borderRadius: 8, padding: '4px 18px' }}>
-                                ❤️ {post.likes?.length || 0}
-                              </span>
-                              <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#6366f1', fontWeight: 700, fontSize: 17, background: '#f3f4f6', borderRadius: 8, padding: '4px 18px' }}>
-                                <span role="img" aria-label="share">🔄</span> {post.shares || 0}
-                              </span>
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#888', fontSize: 15 }}>
-                              <span role="img" aria-label="comment">💬</span> {post.comments?.length || 0} bình luận
-                            </div>
-                          </div>
-                        );
-                      })
-                    )}
+                {/* Debug section - TEMPORARY */}
+                {user && (
+                  <div style={{ margin: '20px 0' }}>
+                    <ProfilePostsDebug userEmail={user.email} />
                   </div>
-                </div>
+                )}
+                
+                {/* User's posts section */}
+                {user && <ProfilePosts user={user} />}
               </div>
             </div>
           </div>

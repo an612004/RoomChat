@@ -137,15 +137,15 @@ router.get('/github/callback', async (req: Request, res: Response) => {
         });
         console.log('💾 New user saved to Firebase:', user.name);
       } else {
-        // Update existing user
+        // Update existing user - CHỈ CẬP NHẬT THÔNG TIN CẦN THIẾT
+        // KHÔNG ghi đè name và avatar đã được user chỉnh sửa
         await userRef.update({
-          name: user.name,
-          email: user.email,
-          avatar: user.avatar,
+          email: user.email,           // Email có thể thay đổi từ provider
           updatedAt: new Date(),
-          lastLogin: new Date()
+          lastLogin: new Date(),
+          provider: 'github'           // Đảm bảo provider được lưu
         });
-        console.log('🔄 User updated in Firebase:', user.name);
+        console.log('🔄 User login updated in Firebase (keeping custom profile data)');
       }
       
       // Save login history
@@ -305,14 +305,14 @@ router.post('/firebase-auth', async (req: Request, res: Response): Promise<void>
         });
         console.log('💾 New Firebase user saved:', user.name);
       } else {
+        // CHỈ cập nhật thông tin cần thiết, KHÔNG ghi đè profile đã chỉnh sửa
         await userRef.update({
-          name: user.name,
-          email: user.email,
-          avatar: user.avatar,
+          email: user.email,           // Email có thể thay đổi từ provider
           updatedAt: new Date(),
-          lastLogin: new Date()
+          lastLogin: new Date(),
+          provider: user.provider      // Cập nhật provider
         });
-        console.log('🔄 Firebase user updated:', user.name);
+        console.log('🔄 Firebase user login updated (keeping custom profile data)');
       }
       // Lấy lại user mới nhất từ Firestore (bao gồm bio)
       const updatedDoc = await userRef.get();

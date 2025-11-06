@@ -2,9 +2,11 @@ import * as dotenv from 'dotenv';
 dotenv.config();
 
 import express, { Request, Response, NextFunction, Application } from 'express';
+import { createServer } from 'http';
 import cors from 'cors';
 import session from 'express-session';
 import path from 'path';
+import socketService from './services/socketService';
 
 // 🧩 Import routes
 import authRoutes from './routes/auth';
@@ -38,9 +40,13 @@ if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !pr
 // 🧩 Kết nối MongoDB
 connectDB();
 
-// 🧩 Khởi tạo app Express
+// 🧩 Khởi tạo app Express và HTTP server
 const app: Application = express();
+const httpServer = createServer(app);
 const PORT: number = parseInt(process.env.PORT || '3000', 10);
+
+// 🧩 Khởi tạo Socket.IO
+socketService.initialize(httpServer);
 
 // 🧩 Middleware cấu hình CORS + session
 app.use(
@@ -101,8 +107,9 @@ app.use('*', (req: Request, res: Response) => {
 });
 
 // 🧩 Chạy server + verify email service
-app.listen(PORT, async () => {
+httpServer.listen(PORT, async () => {
   console.log(`✅ Server running on http://localhost:${PORT}`);
+  console.log(`🔌 Socket.IO server running on http://localhost:${PORT}`);
   console.log(`📘 API Documentation available at http://localhost:${PORT}`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
 

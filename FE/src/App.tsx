@@ -12,6 +12,9 @@ import HomeE from'./pages/Entertainment/HomeE'
 import Trangchu from './components/trangchu/Trangchu';
 import Profileuser from './pages/Profileuser';
 import Splash from './components/Splash'
+import { SocketProvider } from './contexts/SocketContext'
+import { UserSyncProvider } from './contexts/UserSyncContext'
+import { PostsProvider } from './contexts/PostsContext'
 
 const App: React.FC = () => {
   const [splashVisible, setSplashVisible] = useState(false)
@@ -38,8 +41,11 @@ const App: React.FC = () => {
   return (
     <>
       <Splash visible={splashVisible} />
-      <BrowserRouter>
-        <Routes>
+      <UserSyncProvider>
+        <SocketProvider>
+          <PostsProvider>
+            <BrowserRouter>
+          <Routes>
           <Route path='/' element={<LoginPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/login/success" element={<LoginSuccess />} />
@@ -51,8 +57,11 @@ const App: React.FC = () => {
           <Route path="/entertainment/home" element={<HomeE />} />
           <Route path="/trangchu/Trangchu" element={<Trangchu />} />
           <Route path="/profile" element={<Profileuser />} />
-        </Routes>
-      </BrowserRouter>
+          </Routes>
+            </BrowserRouter>
+          </PostsProvider>
+        </SocketProvider>
+      </UserSyncProvider>
     </>
   )
 }

@@ -6,6 +6,29 @@ const EmojiPicker = React.lazy(() => import("./EmojiPicker"));
 import "./Trangchu.css";
 import useAuth from "../../hooks/useAuth";
 import ShareModal from "./share_post/ShareModal";
+import { useUserSync } from "../../contexts/UserSyncContext";
+import { useSocket } from "../../contexts/SocketContext";
+import { usePostsRefresh } from "../../contexts/PostsContext";
+
+// Global cache để lưu trữ posts và timestamp
+let postsCache: {
+  data: any[];
+  timestamp: number;
+  isStale: boolean;
+} = {
+  data: [],
+  timestamp: 0,
+  isStale: true
+};
+
+// Thời gian cache (5 phút)
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
+
+// Thời gian được coi là "rời khỏi website quá lâu" (10 phút)
+const LONG_ABSENCE_DURATION = 10 * 60 * 1000; // 10 minutes
+
+// Track last activity time
+let lastActiveTime = Date.now();
 
 const Trangchu = () => {
   // State cho modal chia sẻ bài viết
@@ -26,6 +49,9 @@ const Trangchu = () => {
 
   const [activePost, setActivePost] = useState<any | null>(null);
   const { user, setUser } = useAuth();
+  const { refreshTrigger } = useUserSync();
+  const { socket, onProfileUpdate, offProfileUpdate } = useSocket();
+  const { triggerPostsRefresh } = usePostsRefresh();
 
   const [showPostForm, setShowPostForm] = useState(false);
   const [posts, setPosts] = useState<any[]>([]);
@@ -66,17 +92,17 @@ const Trangchu = () => {
     setLoadingUsers(true);
     setModalTitle("Những người đã thích bài viết này");
     setShowLikesModal(true);
-    
+
     try {
       const url = `http://localhost:3000/post/${postId}/likes`;
       console.log('🌐 Calling API:', url);
-      
+
       const res = await fetch(url, {
         credentials: 'include',
       });
-      
+
       console.log('📡 API response status:', res.status);
-      
+
       if (res.ok) {
         const data = await res.json();
         console.log('✅ Likes data received:', data);
@@ -100,12 +126,12 @@ const Trangchu = () => {
     setLoadingUsers(true);
     setModalTitle("Những người đã chia sẻ bài viết này");
     setShowSharesModal(true);
-    
+
     try {
       const res = await fetch(`http://localhost:3000/post/${postId}/shares`, {
         credentials: 'include',
       });
-      
+
       if (res.ok) {
         const data = await res.json();
         setModalUsers(data.shares || []);
@@ -138,19 +164,117 @@ const Trangchu = () => {
     fetchFollowing();
   }, [user]);
 
-  // Fetch posts
-  const fetchPosts = async () => {
+  // Fetch posts with intelligent caching
+  const fetchPosts = async (forceRefresh: boolean = false) => {
+    const now = Date.now();
+    const isDataFresh = (now - postsCache.timestamp) < CACHE_DURATION;
+
+    // Sử dụng cache nếu dữ liệu còn fresh và không force refresh
+    if (!forceRefresh && !postsCache.isStale && isDataFresh && postsCache.data.length > 0) {
+      console.log("📦 Sử dụng cached posts, không cần reload");
+      setPosts(postsCache.data);
+      setLoading(false);
+      return;
+    }
+
+    console.log("🔄 Đang tải posts mới...", forceRefresh ? "(force)" : "(cache expired/empty)");
     setLoading(true);
     try {
       const res = await fetch("http://localhost:3000/post");
       const data = await res.json();
-      if (data.success) setPosts(data.posts);
-    } catch { }
+      if (data.success) {
+        const posts = data.posts || [];
+        setPosts(posts);
+        // Cập nhật cache
+        postsCache = {
+          data: posts,
+          timestamp: now,
+          isStale: false
+        };
+      }
+    } catch (err) {
+      console.error("Lỗi khi tải posts:", err);
+    }
     setLoading(false);
   };
 
+  // Hàm để invalidate cache khi cần thiết
+  const invalidateCache = () => {
+    postsCache.isStale = true;
+  };
+
   useEffect(() => {
-    fetchPosts();
+    // Kiểm tra nếu user vừa quay lại sau thời gian dài
+    const now = Date.now();
+    const hasBeenAwayLong = (now - lastActiveTime) > LONG_ABSENCE_DURATION;
+
+    if (hasBeenAwayLong) {
+      console.log("🔄 User đã rời khỏi website quá lâu, force refresh...");
+      invalidateCache();
+      fetchPosts(true);
+    } else {
+      // Chỉ fetch nếu chưa có cache hoặc cache đã quá cũ
+      fetchPosts();
+    }
+
+    // Cập nhật last active time
+    lastActiveTime = now;
+  }, []);
+
+  // 🔄 Listen to user profile changes để refresh posts
+  useEffect(() => {
+    if (refreshTrigger > 0) {
+      console.log("🔄 User profile updated, refreshing posts...");
+      invalidateCache();
+      fetchPosts(true);
+    }
+  }, [refreshTrigger]);
+
+  // 🔄 Listen to Socket.IO profile updates from other users
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleProfileUpdate = (data: { userId: string; name?: string; avatar?: string }) => {
+      console.log("🔄 Received profile update via Socket.IO:", data);
+      
+      // Refresh posts để cập nhật thông tin author
+      invalidateCache();
+      fetchPosts(true);
+    };
+
+    onProfileUpdate(handleProfileUpdate);
+
+    return () => {
+      offProfileUpdate(handleProfileUpdate);
+    };
+  }, [socket, onProfileUpdate, offProfileUpdate]);
+
+  // Track visibility changes để detect khi user rời khỏi tab
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        // User vừa quay lại tab
+        const now = Date.now();
+        const awayDuration = now - lastActiveTime;
+
+        if (awayDuration > LONG_ABSENCE_DURATION) {
+          console.log(`🔄 User vừa quay lại sau ${Math.round(awayDuration / 60000)} phút, force refresh...`);
+          invalidateCache();
+          fetchPosts(true);
+        }
+
+        lastActiveTime = now;
+      } else {
+        // User rời khỏi tab, cập nhật last active time
+        lastActiveTime = Date.now();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, []);
 
   // Poll for new posts and merge them into the feed without reload
@@ -165,10 +289,13 @@ const Trangchu = () => {
         setPosts((prev) => {
           const prevIds = new Set(prev.map((p: any) => p._id));
           const merged = [...prev];
+          let hasNewPosts = false;
+
           latest.forEach((lp: any) => {
             if (!prevIds.has(lp._id)) {
               const p = { ...lp, _justNow: true };
               merged.unshift(p);
+              hasNewPosts = true;
               // clear justNow after 30s
               setTimeout(
                 () =>
@@ -185,6 +312,16 @@ const Trangchu = () => {
               if (idx !== -1) merged[idx] = { ...merged[idx], ...lp };
             }
           });
+
+          // Cập nhật cache nếu có thay đổi
+          if (hasNewPosts || merged.length !== prev.length) {
+            postsCache = {
+              data: merged,
+              timestamp: Date.now(),
+              isStale: false
+            };
+          }
+
           return merged;
         });
       } catch (err) {
@@ -343,7 +480,19 @@ const Trangchu = () => {
                     setShowPostForm(false);
                     // setUploadSuccess("Đăng bài thành công!");
                     const p = { ...data.post, _justNow: true };
-                    setPosts((prev) => [p, ...prev]);
+                    setPosts((prev) => {
+                      const newPosts = [p, ...prev];
+                      // Cập nhật cache với bài viết mới
+                      postsCache = {
+                        data: newPosts,
+                        timestamp: Date.now(),
+                        isStale: false
+                      };
+                      return newPosts;
+                    });
+                    // Trigger refresh cho profile posts
+                    console.log('🏠 Trangchu: Triggering posts refresh after successful post');
+                    triggerPostsRefresh();
                     setTimeout(
                       () =>
                         setPosts((prev) =>
@@ -848,8 +997,11 @@ const Trangchu = () => {
                           }}>
                           {post.authorName}
                         </span>
-                        {/* ✅ Chỉ hiển thị nút nếu KHÔNG phải tài khoản hiện tại */}
-                        {user && post.authorId !== user.id && (
+                        {/* ✅ Chỉ hiển thị nút nếu KHÔNG phải chính mình (check cả ID và email) */}
+                        {user && 
+                         post.authorId !== user.id && 
+                         post.authorId !== user.email &&
+                         !(user.email && post.authorEmail && user.email === post.authorEmail) && (
                           <button
                             data-follow-button={post.authorId}
                             disabled={isFollowingInProgress(post.authorId)}
@@ -887,8 +1039,8 @@ const Trangchu = () => {
                               }
                             }}
                             onClick={async () => {
-                              // Tránh multiple clicks
-                              if (isFollowingInProgress(post.authorId)) return;
+                              // Tránh multiple clicks và null check
+                              if (!user || isFollowingInProgress(post.authorId)) return;
 
                               // Set loading state
                               setFollowingInProgress(prev => new Set(prev).add(post.authorId));
@@ -941,6 +1093,10 @@ const Trangchu = () => {
                                     })
                                     .catch(err => console.error("Lỗi sync user data:", err));
                                 } else {
+                                  // Hiển thị thông báo lỗi từ server
+                                  if (data.message) {
+                                    alert(data.message);
+                                  }
                                   // Rollback optimistic update nếu thất bại
                                   setFollowingList((prev) =>
                                     isCurrentlyFollowing
@@ -1103,7 +1259,9 @@ const Trangchu = () => {
                                     }),
                                   }
                                 );
-                                fetchPosts();
+                                // Force refresh vì đã xóa bài viết
+                                invalidateCache();
+                                fetchPosts(true);
                               }}
                               style={{
                                 display: "block",
@@ -1206,7 +1364,9 @@ const Trangchu = () => {
                             ...prev,
                             [post._id]: [],
                           }));
-                          fetchPosts();
+                          // Force refresh vì đã edit bài viết
+                          invalidateCache();
+                          fetchPosts(true);
                         }}
                         style={{
                           display: "flex",
@@ -1963,10 +2123,10 @@ const Trangchu = () => {
                     >
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         {post.likes?.length > 0 && (
-                          <div 
-                            style={{ 
-                              display: "flex", 
-                              alignItems: "center", 
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
                               gap: 6,
                               cursor: "pointer",
                               padding: "4px 8px",
@@ -2300,7 +2460,9 @@ const Trangchu = () => {
             setShareContent("");
             setSharePrivacy("public");
             setSharePost(null);
-            fetchPosts();
+            // Force refresh vì đã chia sẻ bài viết
+            invalidateCache();
+            fetchPosts(true);
           }}
         />
       )}
@@ -2402,9 +2564,10 @@ const Trangchu = () => {
                       <div style={{ fontWeight: 600, fontSize: 15 }}>
                         {user.name}
                       </div>
-                      <div style={{ fontSize: 13, color: "#6b7280" }}>
+                      {/*ẩn gmail đi*/}
+                      {/* <div style={{ fontSize: 13, color: "#6b7280" }}>
                         {user.email}
-                      </div>
+                      </div> */}
                     </div>
                   </div>
                 ))

@@ -1,5 +1,8 @@
 import React from "react";
 const EmojiPicker = React.lazy(() => import("./EmojiPicker"));
+import StickerPicker from "./StickerPicker";
+import StickerDisplay from "./StickerDisplay";
+
 import {
   Heart,
   Smile,
@@ -8,7 +11,9 @@ import {
   ChevronUp,
   Crown,
   HeartPlus,
+  Sticker,
 } from "lucide-react";
+import { useSocket } from "../../contexts/SocketContext";
 
 interface CommentModalProps {
   post: any;
@@ -23,32 +28,37 @@ const CommentModal: React.FC<CommentModalProps> = ({
   user,
   onPostUpdate,
 }) => {
+  const { socket, joinPost, leavePost } = useSocket();
   // State for viewing media in comments/replies
   const [viewMedia, setViewMedia] = React.useState<{
     src: string;
     type: "image" | "video";
   } | null>(null);
   const [newComment, setNewComment] = React.useState("");
+  const [selectedStickers, setSelectedStickers] = React.useState<Array<{ url: string; name: string }>>([]);
   // showEmoji for comment input
   const [showEmoji, setShowEmoji] = React.useState(false);
+  // showSticker for comment input
+  const [showSticker, setShowSticker] = React.useState(false);
   // showEmojiReply for reply input (tracks replyKey or null)
   const [showEmojiReply, setShowEmojiReply] = React.useState<string | null>(null);
+  // showStickerReply for reply input (tracks replyKey or null)
+  const [showStickerReply, setShowStickerReply] = React.useState<string | null>(null);
   const [newImages, setNewImages] = React.useState<File[]>([]);
   const [previewImages, setPreviewImages] = React.useState<string[]>([]);
   const emojiPickerRef = React.useRef<HTMLDivElement | null>(null);
   const [sending, setSending] = React.useState(false);
   const [activeReplyTo, setActiveReplyTo] = React.useState<string | null>(null);
   const [replyText, setReplyText] = React.useState("");
+  const [replyStickers, setReplyStickers] = React.useState<{ [key: string]: Array<{ url: string; name: string }> }>({});
   const [comments, setComments] = React.useState<any[]>(post.comments || []);
   const [userReacted, setUserReacted] = React.useState<{
     [key: string]: boolean;
   }>({});
-  // Track recent heart actions to prevent polling from overriding them
+  // Track recent heart actions to prevent socket updates from overriding them
   const recentHeartActions = React.useRef<{
     [key: string]: number; // timestamp
   }>({});
-  // Flag to pause polling temporarily during heart actions
-  const [pausePolling, setPausePolling] = React.useState(false);
   const commentsRef = React.useRef<HTMLDivElement | null>(null);
   const postIdRef = React.useRef<string | null>(post?._id || null);
   const [openMenu, setOpenMenu] = React.useState<string | null>(null);
@@ -84,7 +94,13 @@ const CommentModal: React.FC<CommentModalProps> = ({
 
   const submitComment = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!user || !newComment.trim()) return;
+    console.log('🚀 Submit comment called:', {
+      user: !!user,
+      newComment: newComment.trim(),
+      selectedStickers: selectedStickers.length,
+      newImages: newImages.length
+    });
+    if (!user || (!newComment.trim() && selectedStickers.length === 0 && newImages.length === 0)) return;
     setSending(true);
     setShowEmoji(false); // Đóng khung emoji khi gửi bình luận
     let uploadedImages: string[] = [];
@@ -101,26 +117,37 @@ const CommentModal: React.FC<CommentModalProps> = ({
       }
     }
     try {
+      const requestData = {
+        authorId: user.email,
+        authorName: user.name,
+        authorAvatar: user.avatar,
+        content: newComment,
+        stickers: selectedStickers,
+        images: uploadedImages,
+      };
+      console.log('📤 Sending comment data:', requestData);
+      console.log('🔍 Full selectedStickers array:', JSON.stringify(selectedStickers, null, 2));
+
       const res = await fetch(
         `http://localhost:3000/post/${post._id}/comment`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            authorId: user.email,
-            authorName: user.name,
-            authorAvatar: user.avatar,
-            content: newComment,
-            images: uploadedImages,
-          }),
+          body: JSON.stringify(requestData),
         }
       );
       const data = await res.json();
+      console.log('📨 Server response:', { status: res.status, data });
       if (data.success && data.comment) {
-        setComments((prev) => [...prev, data.comment]);
+        // Don't add comment to state here - let Socket.IO handle it
+        // This prevents duplicate comments from optimistic update + real-time
         setNewComment("");
+        setSelectedStickers([]);
         setNewImages([]);
         setPreviewImages([]);
+        console.log('✅ Comment sent successfully, waiting for Socket.IO update...');
+      } else {
+        console.error('❌ Failed to create comment:', data);
       }
     } catch (err) {
       console.error(err);
@@ -130,7 +157,7 @@ const CommentModal: React.FC<CommentModalProps> = ({
 
   const submitReply = async (commentId: string, e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!user || !replyText.trim()) return;
+    if (!user || (!replyText.trim() && (!replyStickers[commentId] || replyStickers[commentId].length === 0))) return;
     setSending(true);
     try {
       // Xác định tên người được reply (comment cha hoặc reply)
@@ -166,6 +193,7 @@ const CommentModal: React.FC<CommentModalProps> = ({
             authorName: user.name,
             authorAvatar: user.avatar,
             content: replyText,
+            stickers: replyStickers[commentId] || [],
             replyToName,
           }),
         }
@@ -194,6 +222,7 @@ const CommentModal: React.FC<CommentModalProps> = ({
         });
         setReplyText("");
         setActiveReplyTo(null);
+        setReplyStickers((prev) => ({ ...prev, [commentId]: [] }));
         setTimeout(() => {
           if (commentsRef.current)
             commentsRef.current.scrollTop = commentsRef.current.scrollHeight;
@@ -273,117 +302,115 @@ const CommentModal: React.FC<CommentModalProps> = ({
     return () => window.removeEventListener("keydown", onKey);
   }, [hasMedia, post]);
 
-  // Poll comments for real-time-ish updates while modal is open
-  const fetchCommentsRef = React.useRef<(() => Promise<void>) | null>(null);
+  // Initial comments load + Socket.IO real-time updates
   React.useEffect(() => {
-    let mounted = true;
-    let intervalId: any = null;
-    const fetchComments = async () => {
-      // Skip polling if we're in the middle of a heart action
-      if (pausePolling) {
-        console.log('Skipping polling due to pausePolling=true');
-        return;
-      }
+    if (!post?._id) return;
 
+    // Initial fetch of comments
+    const fetchInitialComments = async () => {
       try {
-        const res = await fetch(
-          `http://localhost:3000/post/${post._id}/comments`
-        );
+        const res = await fetch(`http://localhost:3000/post/${post._id}/comments`);
         const data = await res.json();
-        if (!mounted || !data?.success) return;
-        const latest: any[] = data.comments || [];
-        // Merge new comments
-        setComments((prev) => {
-          const prevIds = new Set((prev || []).map((c: any) => c._id || c.id));
-          let merged = [...(prev || [])];
-          latest.forEach((lc: any) => {
-            const id = lc._id || lc.id;
-            const prevComment = merged.find((c: any) => (c._id || c.id) === id);
-            if (!prevComment) {
-              // mark as just arrived
-              const newC = { ...lc, _justNow: true };
-              merged.push(newC);
-              setTimeout(() => {
-                setComments((cur) =>
-                  cur.map((cc) =>
-                    cc._id === id ? { ...cc, _justNow: false } : cc
-                  )
-                );
-              }, 30000);
-            } else {
-              // merge reactions.heart from backend, but preserve local changes if just updated
-              merged = merged.map((c: any) => {
-                if ((c._id || c.id) !== id) return c;
-                // Merge replies
-                let mergedReplies = c.replies || [];
-                if (Array.isArray(lc.replies)) {
-                  const now = Date.now();
-                  mergedReplies = lc.replies.map((r: any) => {
-                    // Check if there was a recent heart action for this reply
-                    const replyKey = `${id}-${r._id}`;
-                    const recentReplyAction = recentHeartActions.current[replyKey];
-                    const shouldPreserveReplyHeart = recentReplyAction && (now - recentReplyAction) < 15000; // 15 seconds
-
-                    // Find existing reply to preserve its heart reactions if needed
-                    const existingReply = (c.replies || []).find((er: any) => er._id === r._id);
-
-                    if (shouldPreserveReplyHeart) {
-                      console.log(`Preserving reply ${replyKey} heart reactions due to recent action`);
-                    }
-
-                    return {
-                      ...r,
-                      reactions: shouldPreserveReplyHeart && existingReply?.reactions
-                        ? existingReply.reactions // Keep existing reactions completely
-                        : {
-                          ...r.reactions,
-                          heart: Array.isArray(r.reactions?.heart) ? r.reactions.heart : [],
-                        },
-                    };
-                  });
-                }
-                // Check if there was a recent heart action for this comment
-                const now = Date.now();
-                const recentCommentAction = recentHeartActions.current[id];
-                const shouldPreserveCommentHeart = recentCommentAction && (now - recentCommentAction) < 15000; // 15 seconds
-
-                if (shouldPreserveCommentHeart) {
-                  console.log(`Preserving comment ${id} heart reactions due to recent action`);
-                } else {
-                  console.log(`Polling updating comment ${id} hearts from backend:`, lc.reactions?.heart);
-                }
-
-                return {
-                  ...c,
-                  ...lc,
-                  reactions: shouldPreserveCommentHeart
-                    ? c.reactions // Keep existing reactions completely
-                    : {
-                      ...lc.reactions,
-                      heart: Array.isArray(lc.reactions?.heart) ? lc.reactions.heart : c.reactions?.heart || [],
-                    },
-                  replies: mergedReplies,
-                };
-              });
-            }
-          });
-          return merged;
-        });
+        if (data?.success) {
+          setComments(data.comments || []);
+        }
       } catch (err) {
-        // ignore polling errors silently
+        console.error('Error fetching initial comments:', err);
       }
     };
 
-    // initial fetch
-    fetchCommentsRef.current = fetchComments;
-    fetchComments();
-    intervalId = setInterval(fetchComments, 5000);
+    fetchInitialComments();
+
+    // Join the post room for real-time updates
+    if (socket) {
+      joinPost(post._id);
+      console.log(`🔌 Joined post ${post._id} for real-time comments`);
+    }
 
     return () => {
-      mounted = false;
-      if (intervalId) clearInterval(intervalId);
+      // Leave the post room when modal closes
+      if (socket) {
+        leavePost(post._id);
+        console.log(`🔌 Left post ${post._id}`);
+      }
     };
-  }, [post, pausePolling]);
+  }, [post?._id, socket, joinPost, leavePost]);
+
+  // Socket.IO event listeners for real-time updates
+  React.useEffect(() => {
+    if (!socket) return;
+
+    console.log('🔌 Setting up Socket.IO event listeners for post:', post._id);
+
+    // Handle new comments
+    const handleNewComment = (data: any) => {
+      console.log('🔌 Real-time new comment received:', data);
+      if (data.postId === post._id) {
+        const newComment = { ...data.comment, _justNow: true };
+
+        // Prevent duplicate comments
+        setComments(prev => {
+          const exists = prev.some(c => c._id === newComment._id);
+          if (exists) {
+            console.log('⚠️ Comment already exists, skipping duplicate:', newComment._id);
+            return prev;
+          }
+          console.log('✅ Adding new comment via Socket.IO:', newComment._id);
+          return [...prev, newComment];
+        });
+
+        // Remove "_justNow" flag after 30 seconds
+        setTimeout(() => {
+          setComments(cur =>
+            cur.map(c =>
+              c._id === newComment._id ? { ...c, _justNow: false } : c
+            )
+          );
+        }, 30000);
+      }
+    };
+
+    // Handle comment reactions
+    const handleCommentReaction = (data: any) => {
+      console.log('🔌 Real-time comment reaction received:', data);
+      if (data.postId === post._id) {
+        const now = Date.now();
+        const recentAction = recentHeartActions.current[data.commentId];
+        const shouldPreserveLocal = recentAction && (now - recentAction) < 15000; // 15 seconds
+
+        if (shouldPreserveLocal) {
+          console.log(`Ignoring socket reaction update for comment ${data.commentId} due to recent local action`);
+          return;
+        }
+
+        setComments(prev =>
+          prev.map(comment => {
+            if (comment._id === data.commentId) {
+              return {
+                ...comment,
+                reactions: {
+                  ...comment.reactions,
+                  heart: data.hearts || []
+                }
+              };
+            }
+            return comment;
+          })
+        );
+      }
+    };
+
+    // Register event listeners
+    socket.on('new_comment', handleNewComment);
+    socket.on('comment_reaction', handleCommentReaction);
+
+    return () => {
+      // Cleanup event listeners
+      console.log('🔌 Cleaning up Socket.IO event listeners for post:', post._id);
+      socket.off('new_comment', handleNewComment);
+      socket.off('comment_reaction', handleCommentReaction);
+    };
+  }, [socket, post?._id]);
 
   // Close dropdown menu when clicking outside
   React.useEffect(() => {
@@ -788,9 +815,9 @@ const CommentModal: React.FC<CommentModalProps> = ({
               </div>
             ) : (
               <div>
-                {(comments || []).map((c: any) => (
+                {(comments || []).map((c: any, index: number) => (
                   <div
-                    key={c._id}
+                    key={`comment-${c._id || c.id}-${index}`}
                     style={{
                       display: "flex",
                       gap: 8,
@@ -838,16 +865,8 @@ const CommentModal: React.FC<CommentModalProps> = ({
                         onClick={async () => {
                           // Toggle heart: like/unlike
                           try {
-                            // Pause polling during heart action
-                            setPausePolling(true);
-                            // Record this action to prevent polling override
+                            // Record this action to prevent socket override
                             recentHeartActions.current[c._id] = Date.now();
-
-                            // Resume polling after 10 seconds
-                            setTimeout(() => {
-                              setPausePolling(false);
-                              console.log('Resuming polling after heart action');
-                            }, 10000);
 
                             const isLiked =
                               c.reactions?.heart &&
@@ -968,21 +987,37 @@ const CommentModal: React.FC<CommentModalProps> = ({
                               }}
                             >
                               {c.authorName}
-                              {c.authorId === post.authorId && (
-                                <span
-                                  style={{
-                                    marginLeft: 8,
-                                    fontWeight: 400,
-                                    color: "#eab308",
-                                    fontSize: 12,
-                                    background: "#fffbe6",
-                                    borderRadius: 4,
-                                    padding: "2px 6px",
-                                  }}
-                                >
-                                  Tác giả
-                                </span>
-                              )}
+                              {(() => {
+                                // Debug: Log the comparison
+                                console.log('🔍 Author check:', {
+                                  commentAuthorId: c.authorId,
+                                  postAuthorId: post.authorId,
+                                  commentAuthorName: c.authorName,
+                                  postAuthorName: post.authorName,
+                                  isMatch: c.authorId === post.authorId
+                                });
+
+                                // Check both authorId and authorName for flexibility
+                                const isPostAuthor = c.authorId === post.authorId ||
+                                  (c.authorName === post.authorName &&
+                                    c.authorId && post.authorId);
+
+                                return isPostAuthor && (
+                                  <span
+                                    style={{
+                                      marginLeft: 8,
+                                      fontWeight: 400,
+                                      color: "#eab308",
+                                      fontSize: 12,
+                                      background: "#fffbe6",
+                                      borderRadius: 4,
+                                      padding: "2px 6px",
+                                    }}
+                                  >
+                                    Tác giả
+                                  </span>
+                                );
+                              })()}
                             </div>
                             {user?.email === c.authorId && (
                               <>
@@ -1017,9 +1052,9 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                       data-dropdown-menu
                                       style={{
                                         position: "absolute",
-                                        left: "50%",
-                                        top: "-70px",
-                                        transform: "translateX(-50%)",
+                                        right: "0",
+                                        top: "100%",
+                                        marginTop: "4px",
                                         background: "#fff",
                                         border: "1px solid #ddd",
                                         boxShadow:
@@ -1145,16 +1180,8 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                             )
                                           ) {
                                             try {
-                                              // Pause polling during heart action
-                                              setPausePolling(true);
-                                              // Record this action to prevent polling override
+                                              // Record this action to prevent socket override
                                               recentHeartActions.current[c._id] = Date.now();
-
-                                              // Resume polling after 10 seconds
-                                              setTimeout(() => {
-                                                setPausePolling(false);
-                                                console.log('Resuming polling after heart action (menu)');
-                                              }, 10000);
 
                                               const res = await fetch(
                                                 `http://localhost:3000/post/comment/${c._id}/react?userId=${encodeURIComponent(user?.email || '')}`,
@@ -1261,6 +1288,7 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                     wordWrap: "break-word",
                                     whiteSpace: "pre-wrap",
                                     overflowWrap: "break-word",
+                                    textAlign: "left",
                                   }}
                                 />
                                 <div style={{ display: "flex", gap: 8 }}>
@@ -1301,7 +1329,15 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                   overflowWrap: "break-word",
                                   hyphens: "auto",
                                   lineHeight: 1.4,
+                                  textAlign: "left",
                                 }}>{c.content}</div>
+                                {/* Hiển thị stickers trong comment */}
+                                {c.stickers && c.stickers.length > 0 && (
+                                  <>
+                                    {console.log('🖼️ Rendering stickers for comment:', c._id, c.stickers)}
+                                    <StickerDisplay stickers={c.stickers} size="large" />
+                                  </>
+                                )}
                                 {c.images && c.images.length > 0 && (
                                   <div
                                     style={{
@@ -1366,7 +1402,7 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                         }
                                         onClick={async () => {
                                           try {
-                                            const res = await fetch(
+                                            await fetch(
                                               `http://localhost:3000/post/comment/${c._id}/react`,
                                               {
                                                 method: isLiked ? "DELETE" : "POST",
@@ -1379,9 +1415,6 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                                 }),
                                               }
                                             );
-                                            const data = await res.json();
-                                            // Luôn gọi lại API lấy comment mới sau khi thả/gỡ tim
-                                            if (fetchCommentsRef.current) await fetchCommentsRef.current();
                                           } catch { }
                                         }}
                                       ></button>
@@ -1444,16 +1477,8 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                 title={isLiked ? "Bỏ cảm xúc" : "Thả tim"}
                                 onClick={async () => {
                                   try {
-                                    // Pause polling during heart action
-                                    setPausePolling(true);
-                                    // Record this action to prevent polling override
+                                    // Record this action to prevent socket override
                                     recentHeartActions.current[c._id] = Date.now();
-
-                                    // Resume polling after 10 seconds
-                                    setTimeout(() => {
-                                      setPausePolling(false);
-                                      console.log('Resuming polling after heart action (button 2)');
-                                    }, 10000);
                                     let res;
                                     if (isLiked) {
                                       // DELETE request với userId trong query string
@@ -1547,7 +1572,7 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                   }}
                                 >
                                   {(c.replies || []).map(
-                                    (r: any, idx: number) => {
+                                    (r: any) => {
                                       const replyKey = `reply-${c._id}-${r._id}`;
                                       const latestReply =
                                         (
@@ -1605,8 +1630,22 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                                 }}
                                               >
                                                 {latestReply.authorName}
-                                                {latestReply.authorId ===
-                                                  post.authorId && (
+                                                {(() => {
+                                                  // Debug: Log the reply author comparison
+                                                  console.log('🔍 Reply author check:', {
+                                                    replyAuthorId: latestReply.authorId,
+                                                    postAuthorId: post.authorId,
+                                                    replyAuthorName: latestReply.authorName,
+                                                    postAuthorName: post.authorName,
+                                                    isMatch: latestReply.authorId === post.authorId
+                                                  });
+
+                                                  // Check both authorId and authorName for flexibility
+                                                  const isPostAuthor = latestReply.authorId === post.authorId ||
+                                                    (latestReply.authorName === post.authorName &&
+                                                      latestReply.authorId && post.authorId);
+
+                                                  return isPostAuthor && (
                                                     <span
                                                       style={{
                                                         marginLeft: 6,
@@ -1620,7 +1659,8 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                                     >
                                                       Tác giả
                                                     </span>
-                                                  )}
+                                                  );
+                                                })()}
                                               </div>
                                               <div style={{
                                                 marginTop: 4,
@@ -1630,6 +1670,7 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                                 overflowWrap: "break-word",
                                                 hyphens: "auto",
                                                 lineHeight: 1.4,
+                                                textAlign: "left",
                                               }}>
                                                 <span
                                                   style={{
@@ -1641,6 +1682,10 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                                     c.authorName}
                                                 </span>{" "}
                                                 {latestReply.content}
+                                                {/* Hiển thị stickers trong reply */}
+                                                {latestReply.stickers && latestReply.stickers.length > 0 && (
+                                                  <StickerDisplay stickers={latestReply.stickers} size="medium" />
+                                                )}
                                               </div>
                                               {latestReply.images &&
                                                 latestReply.images.length >
@@ -1819,61 +1864,69 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                                         : "#888",
                                                   }}
                                                   title={
-                                                    latestReply.reactions
-                                                      ?.heart &&
-                                                      latestReply.reactions.heart.includes(
-                                                        user?.email
-                                                      )
+                                                    (latestReply?.reactions?.heart || []).includes(user?.email || '')
                                                       ? "Bỏ cảm xúc"
                                                       : "Thả tim"
                                                   }
                                                   onClick={async () => {
-                                                    // Pause polling during heart action
-                                                    setPausePolling(true);
-                                                    // Record this action to prevent polling override
-                                                    const replyKey = `${c._id}-${r._id}`;
-                                                    recentHeartActions.current[replyKey] = Date.now();
-
-                                                    // Resume polling after 10 seconds
-                                                    setTimeout(() => {
-                                                      setPausePolling(false);
-                                                      console.log('Resuming polling after reply heart action');
-                                                    }, 10000);
-
-                                                    // Chỉ cập nhật optimistic UI, không đồng bộ lại với backend ngay
-                                                    const isLiked = latestReply.reactions?.heart && latestReply.reactions.heart.includes(user?.email);
-                                                    setComments((prev) =>
-                                                      prev.map((pc) => {
-                                                        if (pc._id !== c._id) return pc;
-                                                        return {
-                                                          ...pc,
-                                                          replies: (pc.replies || []).map((rr: any) => {
-                                                            if (rr._id !== r._id) return rr;
-                                                            const newHearts = isLiked
-                                                              ? rr.reactions.heart.filter((email: string) => email !== user?.email)
-                                                              : [...(rr.reactions.heart || []), user?.email];
-                                                            return {
-                                                              ...rr,
-                                                              reactions: {
-                                                                ...rr.reactions,
-                                                                heart: newHearts,
-                                                              },
-                                                            };
-                                                          }),
-                                                        };
-                                                      })
-                                                    );
                                                     try {
-                                                      let res;
+                                                      // Safety checks
+                                                      if (!user?.email) {
+                                                        console.error('User email not found');
+                                                        return;
+                                                      }
+
+                                                      // Record this action to prevent socket override
+                                                      const replyKey = `${c._id}-${r._id}`;
+                                                      recentHeartActions.current[replyKey] = Date.now();
+
+                                                      // Safe check for reactions
+                                                      const hearts = latestReply.reactions?.heart || [];
+                                                      const isLiked = hearts.includes(user.email);
+
+                                                      console.log('Reply heart click:', {
+                                                        replyId: r._id,
+                                                        isLiked,
+                                                        currentHearts: hearts,
+                                                        userEmail: user.email
+                                                      });
+
+                                                      // Optimistic UI update
+                                                      setComments((prev) =>
+                                                        prev.map((pc) => {
+                                                          if (pc._id !== c._id) return pc;
+                                                          return {
+                                                            ...pc,
+                                                            replies: (pc.replies || []).map((rr: any) => {
+                                                              if (rr._id !== r._id) return rr;
+
+                                                              const currentHearts = rr.reactions?.heart || [];
+                                                              const newHearts = isLiked
+                                                                ? currentHearts.filter((email: string) => email !== user.email)
+                                                                : [...currentHearts, user.email];
+
+                                                              return {
+                                                                ...rr,
+                                                                reactions: {
+                                                                  ...rr.reactions,
+                                                                  heart: newHearts,
+                                                                },
+                                                              };
+                                                            }),
+                                                          };
+                                                        })
+                                                      );
+
+                                                      // API call to backend
                                                       if (isLiked) {
-                                                        res = await fetch(
-                                                          `http://localhost:3000/post/comment/${c._id}/reply/${r._id}/react?userId=${user?.email}`,
+                                                        await fetch(
+                                                          `http://localhost:3000/post/comment/${c._id}/reply/${r._id}/react?userId=${encodeURIComponent(user.email)}`,
                                                           {
                                                             method: "DELETE",
                                                           }
                                                         );
                                                       } else {
-                                                        res = await fetch(
+                                                        await fetch(
                                                           `http://localhost:3000/post/comment/${c._id}/reply/${r._id}/react`,
                                                           {
                                                             method: "POST",
@@ -1881,15 +1934,27 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                                               "Content-Type": "application/json",
                                                             },
                                                             body: JSON.stringify({
-                                                              userId: user?.email,
+                                                              userId: user.email,
                                                               reaction: "heart",
                                                             }),
                                                           }
                                                         );
                                                       }
-                                                      // KHÔNG cập nhật lại từ backend ngay
+
+                                                      console.log('✅ Reply heart API call completed');
+
                                                     } catch (err) {
-                                                      console.error("Reply heart error:", err);
+                                                      console.error("❌ Reply heart error:", err);
+                                                      // On error, refresh comments from server
+                                                      try {
+                                                        const res = await fetch(`http://localhost:3000/post/${post._id}/comments`);
+                                                        const data = await res.json();
+                                                        if (data?.success) {
+                                                          setComments(data.comments || []);
+                                                        }
+                                                      } catch (refreshErr) {
+                                                        console.error("Failed to refresh comments:", refreshErr);
+                                                      }
                                                     }
                                                   }}
                                                 >
@@ -1901,8 +1966,8 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                                       marginLeft: 10,
                                                       padding: "2px 8px",
                                                       borderRadius: 16,
-                                                      background: latestReply.reactions?.heart && latestReply.reactions.heart.includes(user?.email) ? "#fee2e2" : "#f3f4f6",
-                                                      color: latestReply.reactions?.heart && latestReply.reactions.heart.includes(user?.email) ? "#e11d48" : "#888",
+                                                      background: (latestReply?.reactions?.heart || []).includes(user?.email) ? "#fee2e2" : "#f3f4f6",
+                                                      color: (latestReply?.reactions?.heart || []).includes(user?.email) ? "#e11d48" : "#888",
                                                       fontWeight: 600,
                                                       fontSize: 14,
                                                       cursor: "pointer",
@@ -1911,7 +1976,7 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                                     }}
                                                   >
                                                     <HeartPlus strokeWidth={1} size={18} />
-                                                    <span>{Array.isArray(latestReply.reactions?.heart) ? latestReply.reactions.heart.length : 0}</span>
+                                                    <span>{Array.isArray(latestReply?.reactions?.heart) ? latestReply.reactions.heart.length : 0}</span>
                                                   </div>
                                                 </button>
                                                 {user?.email === r.authorId && (
@@ -1951,9 +2016,9 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                                         data-dropdown-menu
                                                         style={{
                                                           position: "absolute",
-                                                          left: "50%",
-                                                          top: "-70px",
-                                                          transform: "translateX(-50%)",
+                                                          right: "0",
+                                                          top: "100%",
+                                                          marginTop: "4px",
                                                           background: "#fff",
                                                           border:
                                                             "1px solid #ddd",
@@ -2233,6 +2298,46 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                                       })()}
                                                     </span>
                                                   </div>
+
+                                                  {/* Hiển thị stickers đã chọn cho nested reply */}
+                                                  {replyStickers[replyKey] && replyStickers[replyKey].length > 0 && (
+                                                    <div style={{
+                                                      marginBottom: "10px",
+                                                      padding: "6px",
+                                                      background: "#e0f2fe",
+                                                      borderRadius: "4px",
+                                                      border: "1px solid #0ea5e9"
+                                                    }}>
+                                                      <div style={{
+                                                        fontSize: "11px",
+                                                        fontWeight: 600,
+                                                        color: "#0c4a6e",
+                                                        marginBottom: "4px"
+                                                      }}>
+                                                        💬 Stickers ({replyStickers[replyKey].length}):
+                                                      </div>
+                                                      <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", alignItems: "center" }}>
+                                                        <StickerDisplay stickers={replyStickers[replyKey]} size="small" />
+                                                        <button
+                                                          type="button"
+                                                          onClick={() => setReplyStickers((prev) => ({ ...prev, [replyKey]: [] }))}
+                                                          style={{
+                                                            background: "#ef4444",
+                                                            color: "white",
+                                                            border: "none",
+                                                            borderRadius: "3px",
+                                                            padding: "2px 6px",
+                                                            fontSize: "10px",
+                                                            cursor: "pointer",
+                                                            fontWeight: 600
+                                                          }}
+                                                        >
+                                                          ✕
+                                                        </button>
+                                                      </div>
+                                                    </div>
+                                                  )}
+
                                                   <form
                                                     onSubmit={(e) =>
                                                       submitReply(c._id, e)
@@ -2263,6 +2368,7 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                                         borderRadius: 8,
                                                         border:
                                                           "1px solid #e6e6ef",
+                                                        textAlign: "left",
                                                       }}
                                                     />
                                                     <button
@@ -2279,11 +2385,27 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                                       <Smile size={16} strokeWidth={2} />
                                                     </button>
                                                     <button
+                                                      type="button"
+                                                      onClick={() => {
+                                                        setShowStickerReply(showStickerReply === replyKey ? null : replyKey);
+                                                        setShowEmojiReply(null); // Đóng emoji picker
+                                                      }}
+                                                      style={{
+                                                        background: "none",
+                                                        border: "none",
+                                                        fontSize: 22,
+                                                        cursor: "pointer",
+                                                      }}
+                                                      title="Chọn sticker GIF"
+                                                    >
+                                                      <Sticker size={16} strokeWidth={2} />
+                                                    </button>
+                                                    <button
                                                       type="submit"
                                                       disabled={
                                                         !user ||
                                                         sending ||
-                                                        !replyText.trim()
+                                                        (!replyText.trim() && (!replyStickers[replyKey] || replyStickers[replyKey].length === 0))
                                                       }
                                                       style={{
                                                         background: "#4f46e5",
@@ -2357,6 +2479,46 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                                       </React.Suspense>
                                                     </div>
                                                   )}
+
+                                                  {/* Sticker Picker cho replies */}
+                                                  {showStickerReply === replyKey && (
+                                                    <>
+                                                      {/* Backdrop */}
+                                                      <div
+                                                        style={{
+                                                          position: "fixed",
+                                                          inset: 0,
+                                                          background: "rgba(0,0,0,0.1)",
+                                                          zIndex: 2400
+                                                        }}
+                                                        onClick={() => setShowStickerReply(null)}
+                                                      />
+                                                      <div
+                                                        style={{
+                                                          position: "fixed",
+                                                          right: "20px",
+                                                          top: "50%",
+                                                          transform: "translateY(-50%)",
+                                                          zIndex: 2500,
+                                                          width: "370px",
+                                                          boxShadow: "0 15px 50px rgba(0,0,0,0.3)",
+                                                          borderRadius: "12px",
+                                                          overflow: "hidden"
+                                                        }}
+                                                      >
+                                                        <StickerPicker
+                                                          onStickerSelect={(sticker) => {
+                                                            setReplyStickers((prev) => ({
+                                                              ...prev,
+                                                              [c._id]: [...(prev[c._id] || []), sticker]
+                                                            }));
+                                                            setShowStickerReply(null); // Đóng picker sau khi chọn
+                                                          }}
+                                                          onClose={() => setShowStickerReply(null)}
+                                                        />
+                                                      </div>
+                                                    </>
+                                                  )}
                                                 </div>
                                               )}
                                             </div>
@@ -2406,7 +2568,7 @@ const CommentModal: React.FC<CommentModalProps> = ({
                         )}
                         {activeReplyTo === c._id && (
                           <>
-                            <div style={{ marginTop: 8, marginLeft: isNarrow ? 32 : 46 }}>
+                            <div style={{ marginTop: 8, marginLeft: isNarrow ? 32 : 46, position: "relative" }}>
                               <div
                                 style={{
                                   marginBottom: 6,
@@ -2423,6 +2585,47 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                   {c.authorName}
                                 </span>
                               </div>
+
+                              {/* Hiển thị stickers đã chọn cho reply */}
+                              {replyStickers[c._id] && replyStickers[c._id].length > 0 && (
+                                <div style={{
+                                  marginBottom: "12px",
+                                  padding: "8px",
+                                  background: "#fef3c7",
+                                  borderRadius: "6px",
+                                  border: "1px solid #fbbf24"
+                                }}>
+                                  <div style={{
+                                    fontSize: "12px",
+                                    fontWeight: 600,
+                                    color: "#92400e",
+                                    marginBottom: "6px"
+                                  }}>
+                                    💬 Stickers cho trả lời ({replyStickers[c._id].length}):
+                                  </div>
+                                  <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", alignItems: "center" }}>
+                                    <StickerDisplay stickers={replyStickers[c._id]} size="small" />
+                                    <button
+                                      type="button"
+                                      onClick={() => setReplyStickers((prev) => ({ ...prev, [c._id]: [] }))}
+                                      style={{
+                                        background: "#ef4444",
+                                        color: "white",
+                                        border: "none",
+                                        borderRadius: "4px",
+                                        padding: "4px 8px",
+                                        fontSize: "11px",
+                                        cursor: "pointer",
+                                        fontWeight: 600
+                                      }}
+                                    >
+                                      ✕ Xóa
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
+
                               <form
                                 onSubmit={(e) => submitReply(c._id, e)}
                                 style={{ display: "flex", gap: 8 }}
@@ -2448,6 +2651,7 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                     whiteSpace: "pre-wrap",
                                     overflowWrap: "break-word",
                                     fontFamily: "inherit",
+                                    textAlign: "left",
                                   }}
                                 />
                                 <button
@@ -2466,6 +2670,23 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                   title="Chèn emoji"
                                 >
                                   <Smile size={16} strokeWidth={2} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const key = activeReplyTo || c._id;
+                                    setShowStickerReply(showStickerReply === key ? null : key);
+                                    setShowEmojiReply(null); // Đóng emoji picker
+                                  }}
+                                  style={{
+                                    background: "none",
+                                    border: "none",
+                                    fontSize: 22,
+                                    cursor: "pointer",
+                                  }}
+                                  title="Chọn sticker GIF"
+                                >
+                                  <Sticker size={16} strokeWidth={2} />
                                 </button>
                                 {(() => {
                                   const key = activeReplyTo || c._id;
@@ -2518,10 +2739,57 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                   }
                                   return null;
                                 })()}
+
+                                {/* Sticker Picker cho reply */}
+                                {(() => {
+                                  const key = activeReplyTo || c._id;
+                                  if (showStickerReply === key) {
+                                    return (
+                                      <>
+                                        {/* Backdrop */}
+                                        <div
+                                          style={{
+                                            position: "fixed",
+                                            inset: 0,
+                                            background: "rgba(0,0,0,0.1)",
+                                            zIndex: 2400
+                                          }}
+                                          onClick={() => setShowStickerReply(null)}
+                                        />
+                                        <div
+                                          style={{
+                                            position: "fixed",
+                                            right: "20px",
+                                            top: "50%",
+                                            transform: "translateY(-50%)",
+                                            zIndex: 2500,
+                                            width: "370px",
+                                            boxShadow: "0 10px 40px rgba(0,0,0,0.25)",
+                                            borderRadius: "12px",
+                                            overflow: "hidden"
+                                          }}
+                                        >
+                                          <StickerPicker
+                                            onStickerSelect={(sticker) => {
+                                              setReplyStickers((prev) => ({
+                                                ...prev,
+                                                [key]: [...(prev[key] || []), sticker]
+                                              }));
+                                              setShowStickerReply(null); // Đóng picker sau khi chọn
+                                            }}
+                                            onClose={() => setShowStickerReply(null)}
+                                          />
+                                        </div>
+                                      </>
+                                    );
+                                  }
+                                  return null;
+                                })()}
+
                                 <button
                                   type="submit"
                                   disabled={
-                                    !user || sending || !replyText.trim()
+                                    !user || sending || (!replyText.trim() && (!activeReplyTo || !replyStickers[activeReplyTo] || replyStickers[activeReplyTo].length === 0))
                                   }
                                   style={{
                                     background: "#4f46e5",
@@ -2598,6 +2866,7 @@ const CommentModal: React.FC<CommentModalProps> = ({
                   whiteSpace: "pre-wrap",
                   overflowWrap: "break-word",
                   fontFamily: "inherit",
+                  textAlign: "left",
                 }}
               />
               <button
@@ -2612,6 +2881,24 @@ const CommentModal: React.FC<CommentModalProps> = ({
                 title="Chèn emoji"
               >
                 <Smile size={16} strokeWidth={2} />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  console.log("Sticker button clicked, current showSticker:", showSticker);
+                  // alert("Sticker button clicked!"); // Debug alert
+                  setShowSticker((v) => !v);
+                  setShowEmoji(false); // Đóng emoji picker
+                }}
+                style={{
+                  background: "none",
+                  border: "none",
+                  fontSize: 22,
+                  cursor: "pointer",
+                }}
+                title="Chọn sticker GIF"
+              >
+                <Sticker size={16} strokeWidth={2} />
               </button>
               <label
                 style={{
@@ -2651,7 +2938,7 @@ const CommentModal: React.FC<CommentModalProps> = ({
                 disabled={
                   !user ||
                   sending ||
-                  (!newComment.trim() && newImages.length === 0)
+                  (!newComment.trim() && newImages.length === 0 && selectedStickers.length === 0)
                 }
                 style={{
                   background: "#4f46e5",
@@ -2758,6 +3045,79 @@ const CommentModal: React.FC<CommentModalProps> = ({
                   }}
                 />
               </React.Suspense>
+            </div>
+          )}
+
+          {/* Sticker Picker cho comment input */}
+          {showSticker && (
+            <>
+              {console.log("Rendering sticker picker, showSticker:", showSticker)}
+              <div
+                style={{
+                  position: "fixed",
+                  inset: 0,
+                  background: "rgba(0,0,0,0.1)",
+                  zIndex: 2400
+                }}
+                onClick={() => setShowSticker(false)}
+              />
+              <div style={{
+                position: "fixed",
+                right: "20px",
+                top: "50%",
+                transform: "translateY(-50%)",
+                zIndex: 2500,
+                width: "370px",
+                boxShadow: "0 15px 50px rgba(0,0,0,0.3)",
+                borderRadius: "12px",
+                overflow: "hidden"
+              }}>
+                <StickerPicker
+                  onStickerSelect={(sticker) => {
+                    setSelectedStickers((prev) => [...prev, sticker]);
+                    setShowSticker(false); // Đóng picker sau khi chọn
+                  }}
+                  onClose={() => setShowSticker(false)}
+                />
+              </div>
+            </>
+          )}
+
+          {/* Hiển thị stickers đã chọn */}
+          {selectedStickers.length > 0 && (
+            <div style={{
+              marginTop: "20px",
+              padding: "20px",
+              background: "#f8fafc",
+              borderRadius: "8px",
+              border: "2px dashed #e2e8f0"
+            }}>
+              <div style={{
+                fontSize: "14px",
+                fontWeight: 600,
+                color: "#475569",
+                marginBottom: "8px"
+              }}>
+                📎 Stickers đã chọn ({selectedStickers.length}):
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", alignItems: "center" }}>
+                <StickerDisplay stickers={selectedStickers} size="medium" />
+                <button
+                  onClick={() => setSelectedStickers([])}
+                  style={{
+                    background: "#ef4444",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "6px",
+                    padding: "6px 12px",
+                    fontSize: "12px",
+                    cursor: "pointer",
+                    fontWeight: 600
+                  }}
+                >
+                  ✕ Xóa tất cả
+                </button>
+              </div>
             </div>
           )}
         </div>

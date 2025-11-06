@@ -4,6 +4,7 @@ import { MessageCircle, Smile } from "lucide-react";
 interface ShareModalProps {
   open: boolean;
   user: any;
+  sharePost?: any; // Bài gốc để hiển thị
   shareContent: string;
   sharePrivacy: string;
   onClose: () => void;
@@ -15,6 +16,7 @@ interface ShareModalProps {
 const ShareModal: React.FC<ShareModalProps> = ({
   open,
   user,
+  sharePost,
   shareContent,
   sharePrivacy,
   onClose,
@@ -195,6 +197,67 @@ const ShareModal: React.FC<ShareModalProps> = ({
               />
             </div>
           )}
+          
+          {/* Hiển thị bài gốc */}
+          {sharePost && (
+            <div
+              style={{
+                background: "#f8f9fa",
+                border: "1px solid #e5e7eb",
+                borderRadius: 12,
+                padding: 16,
+                marginTop: 16,
+                marginBottom: 16,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                <img
+                  src={sharePost.authorAvatar || "/default-avatar.png"}
+                  alt={sharePost.authorName}
+                  style={{ width: 32, height: 32, borderRadius: "50%" }}
+                />
+                <span style={{ fontWeight: 600, fontSize: 14 }}>{sharePost.authorName}</span>
+              </div>
+              <div style={{ fontSize: 15, color: "#222", marginBottom: 8 }}>
+                {sharePost.content}
+              </div>
+              {sharePost.images && sharePost.images.length > 0 && (
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {sharePost.images.slice(0, 3).map((img: string, idx: number) => (
+                    <img
+                      key={idx}
+                      src={img.startsWith("/uploads/") ? `http://localhost:3000${img}` : img}
+                      alt={`img-${idx}`}
+                      style={{
+                        width: 80,
+                        height: 80,
+                        objectFit: "cover",
+                        borderRadius: 8,
+                      }}
+                    />
+                  ))}
+                  {sharePost.images.length > 3 && (
+                    <div
+                      style={{
+                        width: 80,
+                        height: 80,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        background: "#e5e7eb",
+                        borderRadius: 8,
+                        fontWeight: 600,
+                        fontSize: 12,
+                      }}
+                    >
+                      +{sharePost.images.length - 3}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           <button
             style={{
               background: "#2563eb",

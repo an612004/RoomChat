@@ -4,6 +4,7 @@ import Post from '../models/Post';
 import Comment from '../models/Comment';
 import { deleteFiles } from '../utils/fileHelpers';
 import { getPostsWithComments } from '../utils/getPostsWithComments';
+import socketService from '../services/socketService';
 
 const router: Router = express.Router();
 
@@ -11,13 +12,13 @@ const router: Router = express.Router();
 router.post('/comment/:id/reply', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { authorId, authorName, authorAvatar, content, emoji, images, videos, imagePublicIds, videoPublicIds } = req.body;
+    const { authorId, authorName, authorAvatar, content, stickers, emoji, images, videos, imagePublicIds, videoPublicIds } = req.body;
     if (!authorId || !authorName || !content) {
       return res.status(400).json({ success: false });
     }
     const comment = await Comment.findById(id);
     if (!comment) return res.status(404).json({ success: false });
-    const reply = { authorId, authorName, authorAvatar, content, emoji, images: images || [], videos: videos || [], imagePublicIds: imagePublicIds || [], videoPublicIds: videoPublicIds || [], createdAt: new Date() };
+    const reply = { authorId, authorName, authorAvatar, content, stickers: stickers || [], emoji, images: images || [], videos: videos || [], imagePublicIds: imagePublicIds || [], videoPublicIds: videoPublicIds || [], createdAt: new Date() };
     comment.replies = comment.replies || [];
     comment.replies.push(reply);
     await comment.save();
@@ -40,6 +41,15 @@ router.post('/comment/:id/react', async (req: Request, res: Response) => {
     if (!comment.reactions.heart.includes(userId)) {
       comment.reactions.heart.push(userId);
       await comment.save();
+      
+      // 🔌 Emit real-time comment reaction event
+      socketService.emitToPost(comment.postId, 'comment_reaction', {
+        postId: comment.postId,
+        commentId: id,
+        userId,
+        reaction: 'heart',
+        hearts: comment.reactions.heart
+      });
     }
     return res.json({ success: true, hearts: comment.reactions.heart });
   } catch (err) {
@@ -231,6 +241,15 @@ router.post('/:id/like', async (req: Request, res: Response) => {
       post.likes.push(userId);
     }
     await post.save();
+    
+    // 🔌 Emit real-time like event to all users viewing this post
+    socketService.emitToPost(id, 'post_liked', {
+      postId: id,
+      userId,
+      liked: !liked,
+      totalLikes: post.likes.length
+    });
+    
   return res.json({ success: true, liked: !liked, likes: post.likes.length });
   } catch (err) {
   return res.status(500).json({ success: false });
@@ -280,15 +299,27 @@ router.post('/:id/share', async (req: Request, res: Response) => {
 router.post('/:id/comment', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { authorId, authorName, authorAvatar, content, images, videos, imagePublicIds, videoPublicIds } = req.body;
-    if (!authorId || !authorName || !content) {
-      return res.status(400).json({ success: false });
+    const { authorId, authorName, authorAvatar, content, stickers, images, videos, imagePublicIds, videoPublicIds } = req.body;
+    console.log('📝 Creating comment with:', { authorId, authorName, content, stickers: stickers?.length, images: images?.length });
+    console.log('🔍 Full stickers array:', stickers);
+    if (!authorId || !authorName || (!content && (!stickers || stickers.length === 0) && (!images || images.length === 0))) {
+      console.log('❌ Validation failed:', { content: !!content, stickers: stickers?.length || 0, images: images?.length || 0 });
+      return res.status(400).json({ success: false, message: 'Content, stickers, or images required' });
     }
-    const comment = new Comment({ postId: id, authorId, authorName, authorAvatar, content, images: images || [], videos: videos || [], imagePublicIds: imagePublicIds || [], videoPublicIds: videoPublicIds || [] });
+    const comment = new Comment({ postId: id, authorId, authorName, authorAvatar, content, stickers: stickers || [], images: images || [], videos: videos || [], imagePublicIds: imagePublicIds || [], videoPublicIds: videoPublicIds || [] });
     await comment.save();
+    console.log('💾 Comment saved:', { _id: comment._id, content: comment.content, stickers: comment.stickers?.length });
+    
+    // 🔌 Emit real-time event to all users viewing this post
+    socketService.emitToPost(id, 'new_comment', {
+      postId: id,
+      comment: comment.toObject()
+    });
+    
     return res.json({ success: true, comment });
   } catch (err) {
-  return res.status(500).json({ success: false });
+    console.error('❌ Error creating comment:', err);
+    return res.status(500).json({ success: false, error: err instanceof Error ? err.message : 'Unknown error' });
   }
 });
 

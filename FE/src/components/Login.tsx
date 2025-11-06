@@ -128,7 +128,7 @@ const Login: React.FC = () => {
           <div className="logo-section">
             <div className="logo-circle">
               <div>
-                <img className='logo-img2 animate-jelly' src="/public/logo.png" alt="Anbi Logo" width={30} />
+                <img className='logo-img2 animate-jelly' src="/logo.png" alt="Anbi Logo" width={30} />
               </div>
             </div>
           </div>
@@ -170,9 +170,9 @@ const Login: React.FC = () => {
           </div>
 
           {/* Social Login Cards */}
-          <div className="social-methods">
+          <div className="social-methods ">
             {/* GitHub */}
-            <button
+            {/* <button
               className={`social-card github ${loadingStates.github ? 'loading' : ''}`}
               onClick={handleGithubAuth}
               disabled={loadingStates.github}
@@ -186,7 +186,7 @@ const Login: React.FC = () => {
                   <div className="dev-badge">Dev</div>
                 </>
               )}
-            </button>
+            </button> */}
 
             {/* Google */}
             <button

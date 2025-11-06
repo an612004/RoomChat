@@ -25,13 +25,33 @@ const LoginSuccess: React.FC = () => {
           // Parse user data from URL
           const userData: UserData = JSON.parse(decodeURIComponent(userParam));
           
-          // Store token and user data
+          // Store token first
           localStorage.setItem('authToken', token);
-          localStorage.setItem('user', JSON.stringify(userData));
           
-          setUser(userData);
+          // 🔄 Fetch latest user data from server instead of using URL params
+          try {
+            const userResponse = await fetch(`http://localhost:3000/user/me/${userData.email}`);
+            const latestUserData = await userResponse.json();
+            
+            if (latestUserData.success && latestUserData.user) {
+              // Use latest data from server
+              console.log('✅ Fetched latest user data:', latestUserData.user);
+              localStorage.setItem('user', JSON.stringify(latestUserData.user));
+              setUser(latestUserData.user);
+            } else {
+              // Fallback to URL data if server fetch fails
+              console.log('⚠️ Using URL data as fallback:', userData);
+              localStorage.setItem('user', JSON.stringify(userData));
+              setUser(userData);
+            }
+          } catch (fetchError) {
+            // Fallback to URL data if server is down
+            console.log('⚠️ Server fetch failed, using URL data:', userData);
+            localStorage.setItem('user', JSON.stringify(userData));
+            setUser(userData);
+          }
+          
           setLoading(false);
-          console.log('✅ Login successful:', userData);
           
           // Redirect to home after 2 seconds
           setTimeout(() => {
