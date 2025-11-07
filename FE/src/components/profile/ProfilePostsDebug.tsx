@@ -38,7 +38,7 @@ const ProfilePostsDebug: React.FC<{ userEmail?: string }> = ({ userEmail }) => {
     }, [userEmail]);
 
     if (loading) {
-        return <div style={{ padding: 20 }}>🔍 Debug: Loading posts...</div>;
+        return <div style={{ padding: 20 }}>🔍 Đang tải bài viết...</div>;
     }
 
     const userPosts = posts.filter(post => post.authorId === userEmail);

@@ -312,7 +312,12 @@ const CommentModal: React.FC<CommentModalProps> = ({
         const res = await fetch(`http://localhost:3000/post/${post._id}/comments`);
         const data = await res.json();
         if (data?.success) {
-          setComments(data.comments || []);
+          const sortedComments = (data.comments || []).sort((a: any, b: any) => {
+            if (a.isPinned && !b.isPinned) return -1;
+            if (!a.isPinned && b.isPinned) return 1;
+            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+          });
+          setComments(sortedComments);
         }
       } catch (err) {
         console.error('Error fetching initial comments:', err);
@@ -640,7 +645,6 @@ const CommentModal: React.FC<CommentModalProps> = ({
               ×
             </button>
           </div>
-
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
             <img
               src={post.authorAvatar || "/default-avatar.png"}
@@ -818,6 +822,7 @@ const CommentModal: React.FC<CommentModalProps> = ({
                 {(comments || []).map((c: any, index: number) => (
                   <div
                     key={`comment-${c._id || c.id}-${index}`}
+                    className={c.isPinned ? "pinned-comment" : ""}
                     style={{
                       display: "flex",
                       gap: 8,
@@ -984,6 +989,9 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                 fontWeight: 700,
                                 color: "#2563eb",
                                 fontSize: isNarrow ? 14 : 15,
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 8,
                               }}
                             >
                               {c.authorName}
@@ -1018,8 +1026,15 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                   </span>
                                 );
                               })()}
+                              {c.isPinned && (
+                                <div className="pinned-by-author">
+                                  <span className="pin-icon">📌</span>
+                                  <span>{post.authorName || post.authorId} đã ghim bình luận này</span>
+                                </div>
+                              )}
                             </div>
-                            {user?.email === c.authorId && (
+
+                            {(user?.email === c.authorId || user?.id === post.authorId) && (
                               <>
                                 <div
                                   style={{ position: "relative", overflow: "visible" }}
@@ -1067,108 +1082,179 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                       }}
                                       onClick={(e) => e.stopPropagation()}
                                     >
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setOpenMenu(null);
-                                          setEditingComment(c._id);
-                                          setEditCommentContent((prev) => ({
-                                            ...prev,
-                                            [c._id]: c.content,
-                                          }));
-                                          setEditExistingImages((prev) => ({
-                                            ...prev,
-                                            [c._id]: c.images
-                                              ? [...c.images]
-                                              : [],
-                                          }));
-                                          setEditExistingVideos((prev) => ({
-                                            ...prev,
-                                            [c._id]: c.videos
-                                              ? [...c.videos]
-                                              : [],
-                                          }));
-                                          setEditNewImages((prev) => ({
-                                            ...prev,
-                                            [c._id]: [],
-                                          }));
-                                          setEditNewVideos((prev) => ({
-                                            ...prev,
-                                            [c._id]: [],
-                                          }));
-                                          setEditPreviewImages((prev) => ({
-                                            ...prev,
-                                            [c._id]: [],
-                                          }));
-                                          setEditPreviewVideos((prev) => ({
-                                            ...prev,
-                                            [c._id]: [],
-                                          }));
-                                        }}
-                                        style={{
-                                          display: "block",
-                                          padding: "8px 14px",
-                                          background: "none",
-                                          border: "none",
-                                          width: "100%",
-                                          textAlign: "left",
-                                          cursor: "pointer",
-                                          color: "#6366f1",
-                                        }}
-                                      >
-                                        Sửa bình luận
-                                      </button>
-                                      <button
-                                        onClick={async (e) => {
-                                          e.stopPropagation();
-                                          setOpenMenu(null);
-                                          if (!confirm("Xóa bình luận này?"))
-                                            return;
-                                          try {
-                                            const res = await fetch(
-                                              `http://localhost:3000/post/comment/${c._id}`,
-                                              {
-                                                method: "DELETE",
+                                      {/* Ghim bình luận - chỉ hiển thị cho tác giả bài viết */}
+                                      {user?.id === post.authorId && (
+                                        <button
+                                          onClick={async (e) => {
+                                            e.stopPropagation();
+                                            setOpenMenu(null);
+                                            try {
+                                              const token = localStorage.getItem('authToken');
+                                              const url = c.isPinned
+                                                ? `http://localhost:3000/post/${post._id}/comments/${c._id}/unpin`
+                                                : `http://localhost:3000/post/${post._id}/comments/${c._id}/pin`;
+
+                                              const response = await fetch(url, {
+                                                method: 'POST',
                                                 headers: {
-                                                  "Content-Type":
-                                                    "application/json",
-                                                },
-                                                body: JSON.stringify({
-                                                  userEmail: user.email,
-                                                }),
-                                              }
-                                            );
-                                            const data = await res.json();
-                                            if (data?.success) {
-                                              setComments((prev) => {
-                                                const next = prev.filter(
-                                                  (pc) => pc._id !== c._id
-                                                );
-                                                try {
-                                                  onPostUpdate?.(post._id, {
-                                                    comments: next,
-                                                  });
-                                                } catch (e) { }
-                                                return next;
+                                                  'Content-Type': 'application/json',
+                                                  'Authorization': `Bearer ${token}`
+                                                }
                                               });
+
+                                              if (response.ok) {
+                                                const actionText = c.isPinned ? "đã bỏ ghim" : "đã ghim";
+                                                const authorName = post.authorName || post.authorId;
+
+                                                // Hiển thị thông báo
+                                                alert(`${authorName} ${actionText} bình luận này`);
+
+                                                setComments(prev => {
+                                                  const updated = prev.map(comment =>
+                                                    comment._id === c._id
+                                                      ? { ...comment, isPinned: !comment.isPinned }
+                                                      : { ...comment, isPinned: false } // Unpin others
+                                                  );
+                                                  // Sort comments with pinned first
+                                                  return updated.sort((a: any, b: any) => {
+                                                    if (a.isPinned && !b.isPinned) return -1;
+                                                    if (!a.isPinned && b.isPinned) return 1;
+                                                    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+                                                  });
+                                                });
+                                              } else {
+                                                const errorData = await response.text();
+                                                console.error('❌ Pin error:', { status: response.status, error: errorData });
+                                                alert('Không thể ghim bình luận. Vui lòng thử lại.');
+                                              }
+                                            } catch (error) {
+                                              console.error('Error toggling pin:', error);
+                                              alert('Có lỗi xảy ra. Vui lòng thử lại.');
                                             }
-                                          } catch (err) {
-                                            console.error(err);
-                                          }
-                                        }}
-                                        style={{
-                                          display: "block",
-                                          padding: "8px 14px",
-                                          background: "none",
-                                          border: "none",
-                                          width: "100%",
-                                          textAlign: "left",
-                                          cursor: "pointer",
-                                          color: "#e11d48",
-                                        }}
-                                      >
-                                        Xóa bình luận
-                                      </button>
+                                          }}
+                                          style={{
+                                            display: "block",
+                                            padding: "8px 14px",
+                                            background: "none",
+                                            border: "none",
+                                            width: "100%",
+                                            textAlign: "left",
+                                            cursor: "pointer",
+                                            color: c.isPinned ? "#e11d48" : "#22c55e",
+                                          }}
+                                        >
+                                          {c.isPinned ? "📌 Bỏ ghim bình luận" : "📌 Ghim bình luận"}
+                                        </button>
+                                      )}
+
+                                      {/* Sửa bình luận - chỉ hiển thị cho tác giả bình luận */}
+                                      {user?.email === c.authorId && (
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setOpenMenu(null);
+                                            setEditingComment(c._id);
+                                            setEditCommentContent((prev) => ({
+                                              ...prev,
+                                              [c._id]: c.content,
+                                            }));
+                                            setEditExistingImages((prev) => ({
+                                              ...prev,
+                                              [c._id]: c.images
+                                                ? [...c.images]
+                                                : [],
+                                            }));
+                                            setEditExistingVideos((prev) => ({
+                                              ...prev,
+                                              [c._id]: c.videos
+                                                ? [...c.videos]
+                                                : [],
+                                            }));
+                                            setEditNewImages((prev) => ({
+                                              ...prev,
+                                              [c._id]: [],
+                                            }));
+                                            setEditNewVideos((prev) => ({
+                                              ...prev,
+                                              [c._id]: [],
+                                            }));
+                                            setEditPreviewImages((prev) => ({
+                                              ...prev,
+                                              [c._id]: [],
+                                            }));
+                                            setEditPreviewVideos((prev) => ({
+                                              ...prev,
+                                              [c._id]: [],
+                                            }));
+                                          }}
+                                          style={{
+                                            display: "block",
+                                            padding: "8px 14px",
+                                            background: "none",
+                                            border: "none",
+                                            width: "100%",
+                                            textAlign: "left",
+                                            cursor: "pointer",
+                                            color: "#6366f1",
+                                          }}
+                                        >
+                                          Sửa bình luận
+                                        </button>
+                                      )}
+                                      {/* Xóa bình luận - chỉ hiển thị cho tác giả bình luận */}
+                                      {user?.email === c.authorId && (
+                                        <button
+                                          onClick={async (e) => {
+                                            e.stopPropagation();
+                                            setOpenMenu(null);
+                                            if (!confirm("Xóa bình luận này?"))
+                                              return;
+                                            try {
+                                              const res = await fetch(
+                                                `http://localhost:3000/post/comment/${c._id}`,
+                                                {
+                                                  method: "DELETE",
+                                                  headers: {
+                                                    "Content-Type":
+                                                      "application/json",
+                                                  },
+                                                  body: JSON.stringify({
+                                                    userEmail: user.email,
+                                                  }),
+                                                }
+                                              );
+                                              const data = await res.json();
+                                              if (data?.success) {
+                                                setComments((prev) => {
+                                                  const next = prev.filter(
+                                                    (pc) => pc._id !== c._id
+                                                  );
+                                                  try {
+                                                    onPostUpdate?.(post._id, {
+                                                      comments: next,
+                                                    });
+                                                  } catch (e) { }
+                                                  return next;
+                                                });
+                                              }
+                                            } catch (err) {
+                                              console.error(err);
+                                            }
+                                          }}
+                                          style={{
+                                            display: "block",
+                                            padding: "8px 14px",
+                                            background: "none",
+                                            border: "none",
+                                            width: "100%",
+                                            textAlign: "left",
+                                            cursor: "pointer",
+                                            color: "#e11d48",
+                                          }}
+                                        >
+                                          Xóa bình luận
+                                        </button>
+                                      )}
                                       <button
                                         onClick={async () => {
                                           setOpenMenu(null);
@@ -1950,7 +2036,12 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                                         const res = await fetch(`http://localhost:3000/post/${post._id}/comments`);
                                                         const data = await res.json();
                                                         if (data?.success) {
-                                                          setComments(data.comments || []);
+                                                          const sortedComments = (data.comments || []).sort((a: any, b: any) => {
+                                                            if (a.isPinned && !b.isPinned) return -1;
+                                                            if (!a.isPinned && b.isPinned) return 1;
+                                                            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+                                                          });
+                                                          setComments(sortedComments);
                                                         }
                                                       } catch (refreshErr) {
                                                         console.error("Failed to refresh comments:", refreshErr);
@@ -2848,11 +2939,13 @@ const CommentModal: React.FC<CommentModalProps> = ({
                 value={newComment}
                 onChange={(e) => setNewComment(e.target.value)}
                 placeholder={
-                  user
-                    ? "Viết bình luận dưới tên " + (user.name || "")
-                    : "Đăng nhập để bình luận"
+                  post.commentsDisabled
+                    ? "Bình luận đã bị tắt cho bài viết này"
+                    : user
+                      ? "Viết bình luận dưới tên " + (user.name || "")
+                      : "Đăng nhập để bình luận"
                 }
-                disabled={!user}
+                disabled={!user || post.commentsDisabled}
                 style={{
                   flex: 1,
                   padding: isNarrow ? 8 : 10,
@@ -2937,6 +3030,7 @@ const CommentModal: React.FC<CommentModalProps> = ({
                 type="submit"
                 disabled={
                   !user ||
+                  post.commentsDisabled ||
                   sending ||
                   (!newComment.trim() && newImages.length === 0 && selectedStickers.length === 0)
                 }
@@ -3121,6 +3215,7 @@ const CommentModal: React.FC<CommentModalProps> = ({
             </div>
           )}
         </div>
+
       </div>
     </div>
   );

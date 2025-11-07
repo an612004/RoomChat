@@ -13,6 +13,7 @@ export interface IPost extends Document {
   shares: number;
   createdAt: Date;
   privacy?: string;
+  commentsDisabled?: boolean;
   sharedPost?: {
     originalPostId: string;
     originalAuthorId: string;
@@ -38,6 +39,7 @@ const PostSchema: Schema = new Schema({
   shares: { type: Number, default: 0 },
   createdAt: { type: Date, default: Date.now },
   privacy: { type: String, default: 'public' },
+  commentsDisabled: { type: Boolean, default: false },
   sharedPost: {
     originalPostId: { type: String },
     originalAuthorId: { type: String },

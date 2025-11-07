@@ -237,10 +237,18 @@ router.get('/login-history', async (req: Request, res: Response) => {
 
 // Middleware to verify JWT token
 function authenticateToken(req: AuthenticatedRequest, res: Response, next: NextFunction): void {
+  console.log('🔑 Auth middleware called for:', req.method, req.url);
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
+  console.log('🔑 Token check:', { 
+    hasAuthHeader: !!authHeader, 
+    tokenLength: token?.length,
+    tokenStart: token?.substring(0, 20) + '...'
+  });
+
   if (!token) {
+    console.log('❌ No token provided');
     res.status(401).json({ success: false, message: 'Access token required' });
     return;
   }
@@ -256,6 +264,7 @@ function authenticateToken(req: AuthenticatedRequest, res: Response, next: NextF
       res.status(403).json({ success: false, message: 'Invalid token' });
       return;
     }
+    console.log('🔑 JWT decoded user:', user);
     req.user = user;
     next();
   });
@@ -682,4 +691,5 @@ router.patch('/notifications/mark-read', async (req: Request, res: Response) => 
   }
 });
 
+export { authenticateToken as auth };
 export default router;

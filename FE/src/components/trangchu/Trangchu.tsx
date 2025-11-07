@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Tag, MapPin, Laugh, Heart, Share2, MessageCircle } from "lucide-react";
+import { Tag, MapPin, Laugh, Heart, Share2, MessageCircle, Lock } from "lucide-react";
 import CommentSection from "./CommentSection";
 import CommentModal from "./CommentModal";
 const EmojiPicker = React.lazy(() => import("./EmojiPicker"));
@@ -236,7 +236,7 @@ const Trangchu = () => {
 
     const handleProfileUpdate = (data: { userId: string; name?: string; avatar?: string }) => {
       console.log("🔄 Received profile update via Socket.IO:", data);
-      
+
       // Refresh posts để cập nhật thông tin author
       invalidateCache();
       fetchPosts(true);
@@ -998,137 +998,137 @@ const Trangchu = () => {
                           {post.authorName}
                         </span>
                         {/* ✅ Chỉ hiển thị nút nếu KHÔNG phải chính mình (check cả ID và email) */}
-                        {user && 
-                         post.authorId !== user.id && 
-                         post.authorId !== user.email &&
-                         !(user.email && post.authorEmail && user.email === post.authorEmail) && (
-                          <button
-                            data-follow-button={post.authorId}
-                            disabled={isFollowingInProgress(post.authorId)}
-                            style={{
-                              background: isFollowing(post.authorId) ? "#fff" : "#fff",
-                              color: isFollowingInProgress(post.authorId)
-                                ? "#999"
-                                : (isFollowing(post.authorId) ? "#666" : "#1877f2"),
-                              border: isFollowing(post.authorId)
-                                ? "1px solid #ccc"
-                                : "1px solid #1877f2",
-                              borderRadius: 16,
-                              padding: "4px 12px",
-                              fontSize: 14,
-                              fontWeight: 600,
-                              cursor: isFollowingInProgress(post.authorId) ? "not-allowed" : "pointer",
-                              transition: "all .2s ease, transform .1s ease",
-                              marginLeft: 4, // 👈 lùi sát về bên trái
-                              opacity: isFollowingInProgress(post.authorId) ? 0.6 : 1,
-                            }}
-                            onMouseOver={(e) => {
-                              if (!isFollowingInProgress(post.authorId)) {
-                                if (isFollowing(post.authorId)) {
-                                  e.currentTarget.style.background = "#f5f5f5";
-                                } else {
-                                  e.currentTarget.style.background = "#f0f2f5";
+                        {user &&
+                          post.authorId !== user.id &&
+                          post.authorId !== user.email &&
+                          !(user.email && post.authorEmail && user.email === post.authorEmail) && (
+                            <button
+                              data-follow-button={post.authorId}
+                              disabled={isFollowingInProgress(post.authorId)}
+                              style={{
+                                background: isFollowing(post.authorId) ? "#fff" : "#fff",
+                                color: isFollowingInProgress(post.authorId)
+                                  ? "#999"
+                                  : (isFollowing(post.authorId) ? "#666" : "#1877f2"),
+                                border: isFollowing(post.authorId)
+                                  ? "1px solid #ccc"
+                                  : "1px solid #1877f2",
+                                borderRadius: 16,
+                                padding: "4px 12px",
+                                fontSize: 14,
+                                fontWeight: 600,
+                                cursor: isFollowingInProgress(post.authorId) ? "not-allowed" : "pointer",
+                                transition: "all .2s ease, transform .1s ease",
+                                marginLeft: 4, // 👈 lùi sát về bên trái
+                                opacity: isFollowingInProgress(post.authorId) ? 0.6 : 1,
+                              }}
+                              onMouseOver={(e) => {
+                                if (!isFollowingInProgress(post.authorId)) {
+                                  if (isFollowing(post.authorId)) {
+                                    e.currentTarget.style.background = "#f5f5f5";
+                                  } else {
+                                    e.currentTarget.style.background = "#f0f2f5";
+                                  }
+                                  e.currentTarget.style.transform = "scale(1.02)";
                                 }
-                                e.currentTarget.style.transform = "scale(1.02)";
-                              }
-                            }}
-                            onMouseOut={(e) => {
-                              if (!isFollowingInProgress(post.authorId)) {
-                                e.currentTarget.style.background = "#fff";
-                                e.currentTarget.style.transform = "scale(1)";
-                              }
-                            }}
-                            onClick={async () => {
-                              // Tránh multiple clicks và null check
-                              if (!user || isFollowingInProgress(post.authorId)) return;
+                              }}
+                              onMouseOut={(e) => {
+                                if (!isFollowingInProgress(post.authorId)) {
+                                  e.currentTarget.style.background = "#fff";
+                                  e.currentTarget.style.transform = "scale(1)";
+                                }
+                              }}
+                              onClick={async () => {
+                                // Tránh multiple clicks và null check
+                                if (!user || isFollowingInProgress(post.authorId)) return;
 
-                              // Set loading state
-                              setFollowingInProgress(prev => new Set(prev).add(post.authorId));
+                                // Set loading state
+                                setFollowingInProgress(prev => new Set(prev).add(post.authorId));
 
-                              // Optimistic update - cập nhật UI ngay lập tức
-                              const isCurrentlyFollowing = isFollowing(post.authorId);
-                              setFollowingList((prev) =>
-                                isCurrentlyFollowing
-                                  ? prev.filter((id) => id !== post.authorId)
-                                  : [...prev, post.authorId]
-                              );
+                                // Optimistic update - cập nhật UI ngay lập tức
+                                const isCurrentlyFollowing = isFollowing(post.authorId);
+                                setFollowingList((prev) =>
+                                  isCurrentlyFollowing
+                                    ? prev.filter((id) => id !== post.authorId)
+                                    : [...prev, post.authorId]
+                                );
 
-                              try {
-                                const res = await fetch("http://localhost:3000/user/follow", {
-                                  method: "POST",
-                                  headers: { "Content-Type": "application/json" },
-                                  body: JSON.stringify({
-                                    currentUserId: user.id,
-                                    targetUserId: post.authorId,
-                                  }),
-                                });
-                                const data = await res.json();
+                                try {
+                                  const res = await fetch("http://localhost:3000/user/follow", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({
+                                      currentUserId: user.id,
+                                      targetUserId: post.authorId,
+                                    }),
+                                  });
+                                  const data = await res.json();
 
-                                if (data.success) {
-                                  // Sync với server response (case server khác với optimistic)
-                                  setFollowingList((prev) =>
-                                    data.action === "followed"
-                                      ? [...prev.filter((id) => id !== post.authorId), post.authorId]
-                                      : prev.filter((id) => id !== post.authorId)
-                                  );
+                                  if (data.success) {
+                                    // Sync với server response (case server khác với optimistic)
+                                    setFollowingList((prev) =>
+                                      data.action === "followed"
+                                        ? [...prev.filter((id) => id !== post.authorId), post.authorId]
+                                        : prev.filter((id) => id !== post.authorId)
+                                    );
 
-                                  // Visual feedback - flash success color
-                                  const buttonEl = document.querySelector(`[data-follow-button="${post.authorId}"]`) as HTMLElement;
-                                  if (buttonEl) {
-                                    buttonEl.style.background = data.action === "followed" ? "#42a047" : "#ff9800";
-                                    buttonEl.style.color = "#fff";
-                                    setTimeout(() => {
-                                      buttonEl.style.background = "#fff";
-                                      buttonEl.style.color = isFollowing(post.authorId) ? "#666" : "#1877f2";
-                                    }, 300);
+                                    // Visual feedback - flash success color
+                                    const buttonEl = document.querySelector(`[data-follow-button="${post.authorId}"]`) as HTMLElement;
+                                    if (buttonEl) {
+                                      buttonEl.style.background = data.action === "followed" ? "#42a047" : "#ff9800";
+                                      buttonEl.style.color = "#fff";
+                                      setTimeout(() => {
+                                        buttonEl.style.background = "#fff";
+                                        buttonEl.style.color = isFollowing(post.authorId) ? "#666" : "#1877f2";
+                                      }, 300);
+                                    }
+
+                                    // ✅ Cập nhật user trong background (không block UI)
+                                    fetch(`http://localhost:3000/user/me/${user.id}`)
+                                      .then(resUser => resUser.json())
+                                      .then(dataUser => {
+                                        if (dataUser.success && dataUser.user) {
+                                          setUser(dataUser.user);
+                                        }
+                                      })
+                                      .catch(err => console.error("Lỗi sync user data:", err));
+                                  } else {
+                                    // Hiển thị thông báo lỗi từ server
+                                    if (data.message) {
+                                      alert(data.message);
+                                    }
+                                    // Rollback optimistic update nếu thất bại
+                                    setFollowingList((prev) =>
+                                      isCurrentlyFollowing
+                                        ? [...prev, post.authorId]
+                                        : prev.filter((id) => id !== post.authorId)
+                                    );
                                   }
-
-                                  // ✅ Cập nhật user trong background (không block UI)
-                                  fetch(`http://localhost:3000/user/me/${user.id}`)
-                                    .then(resUser => resUser.json())
-                                    .then(dataUser => {
-                                      if (dataUser.success && dataUser.user) {
-                                        setUser(dataUser.user);
-                                      }
-                                    })
-                                    .catch(err => console.error("Lỗi sync user data:", err));
-                                } else {
-                                  // Hiển thị thông báo lỗi từ server
-                                  if (data.message) {
-                                    alert(data.message);
-                                  }
-                                  // Rollback optimistic update nếu thất bại
+                                } catch (err) {
+                                  console.error("Lỗi khi theo dõi/bỏ theo dõi:", err);
+                                  // Rollback optimistic update nếu có lỗi
                                   setFollowingList((prev) =>
                                     isCurrentlyFollowing
                                       ? [...prev, post.authorId]
                                       : prev.filter((id) => id !== post.authorId)
                                   );
+                                } finally {
+                                  // Clear loading state
+                                  setFollowingInProgress(prev => {
+                                    const newSet = new Set(prev);
+                                    newSet.delete(post.authorId);
+                                    return newSet;
+                                  });
                                 }
-                              } catch (err) {
-                                console.error("Lỗi khi theo dõi/bỏ theo dõi:", err);
-                                // Rollback optimistic update nếu có lỗi
-                                setFollowingList((prev) =>
-                                  isCurrentlyFollowing
-                                    ? [...prev, post.authorId]
-                                    : prev.filter((id) => id !== post.authorId)
-                                );
-                              } finally {
-                                // Clear loading state
-                                setFollowingInProgress(prev => {
-                                  const newSet = new Set(prev);
-                                  newSet.delete(post.authorId);
-                                  return newSet;
-                                });
-                              }
-                            }}
+                              }}
 
-                          >
-                            {isFollowingInProgress(post.authorId)
-                              ? "..."
-                              : (isFollowing(post.authorId) ? "Đang theo dõi" : "Theo dõi")
-                            }
-                          </button>
-                        )}
+                            >
+                              {isFollowingInProgress(post.authorId)
+                                ? "..."
+                                : (isFollowing(post.authorId) ? "Đang theo dõi" : "Theo dõi")
+                              }
+                            </button>
+                          )}
 
 
                       </div>
@@ -1275,6 +1275,57 @@ const Trangchu = () => {
                               }}
                             >
                               Xóa
+                            </button>
+                            <button
+                              onClick={async (e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setOpenPostMenu(null);
+
+                                const action = post.commentsDisabled ? "bật" : "tắt";
+                                if (!confirm(`Bạn có muốn ${action} bình luận cho bài viết này?`)) return;
+
+                                try {
+                                  const response = await fetch(`http://localhost:3000/post/${post._id}/toggle-comments`, {
+                                    method: 'POST',
+                                    headers: {
+                                      'Content-Type': 'application/json',
+                                      'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+                                    }
+                                  });
+
+                                  if (response.ok) {
+                                    const data = await response.json();
+                                    alert(data.message);
+
+                                    // Update local state immediately
+                                    setPosts(prev => prev.map(p =>
+                                      p._id === post._id
+                                        ? { ...p, commentsDisabled: data.commentsDisabled }
+                                        : p
+                                    ));
+                                  } else {
+                                    const errorData = await response.text();
+                                    console.error('Toggle comments error:', errorData);
+                                    alert('Không thể thay đổi cài đặt bình luận. Vui lòng thử lại.');
+                                  }
+                                } catch (error) {
+                                  console.error('Error toggling comments:', error);
+                                  alert('Có lỗi xảy ra. Vui lòng thử lại.');
+                                }
+                              }}
+                              style={{
+                                display: "block",
+                                padding: "8px 14px",
+                                background: "none",
+                                border: "none",
+                                width: 220,
+                                textAlign: "left",
+                                cursor: "pointer",
+                                color: post.commentsDisabled ? "#22c55e" : "#f59e0b",
+                              }}
+                            >
+                              {post.commentsDisabled ? "🔓 Bật bình luận" : "🔒 Tắt bình luận"}
                             </button>
                           </div>
                         )}
@@ -2157,29 +2208,49 @@ const Trangchu = () => {
                       </div>
 
                       <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-                        {post.comments?.length > 0 && (
-                          <span
-                            style={{
-                              cursor: "pointer",
-                              fontWeight: 500,
-                              transition: "color 0.2s",
-                            }}
-                            onClick={() => {
+                        {/* Luôn hiển thị CommentSection, chỉ thêm thông báo khi bình luận bị tắt */}
+                        <span
+                          style={{
+                            cursor: "pointer",
+                            fontWeight: 500,
+                            transition: "color 0.2s",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "4px"
+                          }}
+                          onClick={() => {
+                            setActivePost(post);
+                            setShowCommentModal(true);
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.color = "#374151"}
+                          onMouseLeave={(e) => e.currentTarget.style.color = "#65737e"}
+                        >
+                          <CommentSection
+                            comments={post.comments || []}
+                            onShowModal={() => {
                               setActivePost(post);
                               setShowCommentModal(true);
                             }}
-                            onMouseEnter={(e) => e.currentTarget.style.color = "#374151"}
-                            onMouseLeave={(e) => e.currentTarget.style.color = "#65737e"}
-                          >
-                            <CommentSection
-                              comments={post.comments || []}
-                              onShowModal={() => {
-                                setActivePost(post);
-                                setShowCommentModal(true);
-                              }}
-                            />
-                          </span>
-                        )}
+                          />
+                          {/* {post.commentsDisabled && (
+                            // <div style={{ 
+                            //   background: "#fef3c7",
+                            //   border: "1px solid #f59e0b",
+                            //   borderRadius: "6px",
+                            //   padding: "6px 10px",
+                            //   color: "#92400e",
+                            //   fontSize: "13px",
+                            //   fontWeight: "500",
+                            //   display: "flex",
+                            //   alignItems: "center",
+                            //   gap: "6px",
+                            //   marginTop: "6px",
+                            //   width: "fit-content"
+                            // }}>
+                            //   🔒 Bình luận đã tắt
+                            // </div>
+                          )} */}
+                        </span>
                         {post.shares > 0 && (
                           <span
                             style={{
@@ -2310,8 +2381,10 @@ const Trangchu = () => {
 
                     <button
                       onClick={() => {
-                        setActivePost(post);
-                        setShowCommentModal(true);
+                        if (!post.commentsDisabled) {
+                          setActivePost(post);
+                          setShowCommentModal(true);
+                        }
                       }}
                       style={{
                         display: "flex",
@@ -2321,23 +2394,36 @@ const Trangchu = () => {
                         flex: 1,
                         padding: "10px 16px",
                         background: "transparent",
-                        color: "#65737e",
+                        color: post.commentsDisabled ? "#9ca3af" : "#65737e",
                         border: "none",
                         borderRadius: 8,
                         fontSize: 15,
                         fontWeight: 600,
-                        cursor: "pointer",
+                        cursor: post.commentsDisabled ? "not-allowed" : "pointer",
                         transition: "all 0.2s ease",
+                        opacity: post.commentsDisabled ? 0.6 : 1
                       }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = "rgba(107, 114, 128, 0.1)";
+                        if (!post.commentsDisabled) {
+                          e.currentTarget.style.backgroundColor = "rgba(107, 114, 128, 0.1)";
+                        }
                       }}
                       onMouseLeave={(e) => {
                         e.currentTarget.style.backgroundColor = "transparent";
                       }}
+                      disabled={post.commentsDisabled}
                     >
-                      <MessageCircle size={18} strokeWidth={1.5} />
-                      <span>Bình luận</span>
+                      {post.commentsDisabled ? (
+                        <>
+                          <span ><Lock strokeWidth={2.25} /></span>
+                          <span>Bình luận đã tắt</span>
+                        </>
+                      ) : (
+                        <>
+                          <MessageCircle size={18} strokeWidth={1.5} />
+                          <span>Bình luận</span>
+                        </>
+                      )}
                     </button>
 
                     <button

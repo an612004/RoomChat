@@ -13,6 +13,7 @@ export interface IComment extends Document {
   videos?: string[];
   imagePublicIds?: string[];
   videoPublicIds?: string[];
+  isPinned?: boolean;
   replies?: Array<{
     _id?: any;
     authorId: string;
@@ -49,6 +50,7 @@ const CommentSchema: Schema = new Schema({
   videos: { type: [String], default: [] },
   imagePublicIds: { type: [String], default: [] },
   videoPublicIds: { type: [String], default: [] },
+  isPinned: { type: Boolean, default: false },
   replies: [
     {
       _id: { type: Schema.Types.ObjectId, default: () => new mongoose.Types.ObjectId() },

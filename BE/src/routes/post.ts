@@ -5,6 +5,11 @@ import Comment from '../models/Comment';
 import { deleteFiles } from '../utils/fileHelpers';
 import { getPostsWithComments } from '../utils/getPostsWithComments';
 import socketService from '../services/socketService';
+import { auth } from './auth';
+
+interface AuthenticatedRequest extends Request {
+  user?: any;
+}
 
 const router: Router = express.Router();
 
@@ -684,6 +689,152 @@ router.get('/:id/shares', async (req: Request, res: Response) => {
   } catch (err) {
     console.error('❌ Get shares error:', err);
     return res.status(500).json({ success: false, message: 'Lỗi khi lấy danh sách chia sẻ' });
+  }
+});
+
+// Pin comment
+router.post('/:postId/comments/:commentId/pin', auth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { postId, commentId } = req.params;
+    const userId = req.user.userId;
+    
+    console.log('🔍 Pin request debug:', {
+      postId,
+      commentId,
+      userId,
+      userObject: req.user
+    });
+
+    // Check if user is the post author
+    const post = await Post.findById(postId);
+    if (!post) {
+      return res.status(404).json({ message: 'Post not found' });
+    }
+
+    console.log('🔍 Authorization check:', {
+      postAuthorId: post.authorId,
+      userId,
+      userEmail: req.user.email,
+      isMatchUserId: post.authorId.toString() === userId,
+      isMatchEmail: post.authorId.toString() === req.user.email
+    });
+
+    // Check authorization using email (since posts are stored with email as authorId)
+    const isAuthorized = post.authorId.toString() === req.user.email || post.authorId.toString() === userId;
+    
+    if (!isAuthorized) {
+      return res.status(403).json({ message: 'Only post author can pin comments' });
+    }
+
+    // Unpin any previously pinned comment for this post
+    await Comment.updateMany({ postId: postId }, { isPinned: false });
+
+    // Pin the selected comment
+    const comment = await Comment.findById(commentId);
+    if (!comment) {
+      return res.status(404).json({ message: 'Comment not found' });
+    }
+
+    comment.isPinned = true;
+    await comment.save();
+
+    return res.json({ message: 'Comment pinned successfully' });
+  } catch (error) {
+    return res.status(500).json({ message: 'Server error', error });
+  }
+});
+
+// Test auth route
+router.get('/test-auth', auth, async (req: AuthenticatedRequest, res: Response) => {
+  console.log('🧪 Test auth route - User:', req.user);
+  return res.json({ success: true, user: req.user });
+});
+
+// Unpin comment
+router.post('/:postId/comments/:commentId/unpin', auth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { postId, commentId } = req.params;
+    const userId = req.user.userId;
+
+    // Check if user is the post author
+    const post = await Post.findById(postId);
+    if (!post) {
+      return res.status(404).json({ message: 'Post not found' });
+    }
+
+    console.log('🔍 Unpin Authorization check:', {
+      postAuthorId: post.authorId,
+      userId,
+      userEmail: req.user.email,
+      isMatchUserId: post.authorId.toString() === userId,
+      isMatchEmail: post.authorId.toString() === req.user.email
+    });
+
+    // Check authorization using email (since posts are stored with email as authorId)
+    const isAuthorized = post.authorId.toString() === req.user.email || post.authorId.toString() === userId;
+    
+    if (!isAuthorized) {
+      return res.status(403).json({ message: 'Only post author can unpin comments' });
+    }
+
+    const comment = await Comment.findById(commentId);
+    if (!comment) {
+      return res.status(404).json({ message: 'Comment not found' });
+    }
+
+    comment.isPinned = false;
+    await comment.save();
+
+    return res.json({ message: 'Comment unpinned successfully' });
+  } catch (error) {
+    return res.status(500).json({ message: 'Server error', error });
+  }
+});
+
+// Toggle comments for a post
+router.post('/:postId/toggle-comments', auth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { postId } = req.params;
+    
+    console.log('🔍 Toggle comments request:', {
+      postId,
+      userId: req.user?.userId,
+      userEmail: req.user?.email
+    });
+
+    // Find the post
+    const post = await Post.findById(postId);
+    if (!post) {
+      return res.status(404).json({ message: 'Post not found' });
+    }
+
+    // Check if user is the post author
+    const isAuthor = req.user?.email === post.authorId;
+    if (!isAuthor) {
+      console.log('❌ Authorization failed:', {
+        postAuthorId: post.authorId,
+        userEmail: req.user?.email,
+        isAuthor
+      });
+      return res.status(403).json({ message: 'Only post author can toggle comments' });
+    }
+
+    // Toggle comments
+    post.commentsDisabled = !post.commentsDisabled;
+    await post.save();
+
+    console.log('✅ Comments toggled:', {
+      postId,
+      commentsDisabled: post.commentsDisabled
+    });
+
+    return res.json({ 
+      message: `Comments ${post.commentsDisabled ? 'disabled' : 'enabled'} successfully`,
+      commentsDisabled: post.commentsDisabled 
+    });
+  } catch (error) {
+    console.error('❌ Toggle comments error:', error);
+    return res.status(500).json({ message: 'Server error', error });
   }
 });
 

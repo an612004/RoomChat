@@ -19,6 +19,7 @@ interface ProfilePost {
   likes?: string[];
   shares?: number;
   comments?: any[];
+  commentsDisabled?: boolean;
 }
 
 interface User {
@@ -239,6 +240,50 @@ const ProfilePosts: React.FC<ProfilePostsProps> = ({ user }) => {
     }
   };
 
+  // Xử lý tắt/bật bình luận
+  const handleToggleComments = async (postId: string) => {
+    try {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        alert('Vui lòng đăng nhập để thực hiện thao tác này');
+        return;
+      }
+
+      const response = await fetch(`http://localhost:3000/post/${postId}/toggle-comments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        // Cập nhật local state
+        setPosts(prevPosts => prevPosts.map(post => 
+          post._id === postId 
+            ? { ...post, commentsDisabled: data.commentsDisabled }
+            : post
+        ));
+        alert(data.message);
+      } else {
+        const errorData = await response.text();
+        console.error('Toggle comments error:', errorData);
+        alert('Không thể thay đổi cài đặt bình luận. Vui lòng thử lại.');
+      }
+    } catch (error) {
+      console.error('Error toggling comments:', error);
+      alert('Có lỗi xảy ra. Vui lòng thử lại.');
+    }
+  };
+
+  // Xử lý quản lý ghim bình luận
+  const handleManagePinComments = (post: ProfilePost) => {
+    // Mở modal comment với chế độ quản lý ghim
+    setActivePost(post);
+    setShowCommentModal(true);
+  };
+
   if (loading) {
     return (
       <div style={{ 
@@ -339,6 +384,8 @@ const ProfilePosts: React.FC<ProfilePostsProps> = ({ user }) => {
                   onShare={handleShare}
                   onEdit={handleEdit}
                   onDelete={handleDelete}
+                  onToggleComments={handleToggleComments}
+                  onManagePinComments={handleManagePinComments}
                 />
               ))}
             </div>
