@@ -2,6 +2,7 @@ import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IPost extends Document {
   authorId: string;
+  authorEmail?: string;
   authorName: string;
   authorAvatar?: string;
   content: string;
@@ -28,6 +29,7 @@ export interface IPost extends Document {
 
 const PostSchema: Schema = new Schema({
   authorId: { type: String, required: true },
+  authorEmail: { type: String },
   authorName: { type: String, required: true },
   authorAvatar: { type: String },
   content: { type: String, required: true },

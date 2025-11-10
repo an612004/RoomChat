@@ -3,7 +3,8 @@ import { createPortal } from 'react-dom';
 import './HeaderNotify.css';
 import useAuth from '../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, Bell, House, TvMinimalPlay, Blocks, MessageCircleMore, User, Settings, ChevronDown } from 'lucide-react';
+import { ChevronDown, Bell, LogOut, Settings, House, TvMinimalPlay, Blocks, MessageCircleMore, User } from 'lucide-react';
+import VerifiedBadge from './VerifiedBadge';
 
 const Header: React.FC = () => {
   // ...existing code...
@@ -18,23 +19,55 @@ const Header: React.FC = () => {
   const [hasUnread, setHasUnread] = useState(false);
   const unreadCount = notifications.filter((n: any) => {
     const readBy = Array.isArray(n.readBy) ? n.readBy : [];
-    const uid = user?.email ?? null;
-    return !readBy.includes(uid);
+    // Get real user ID from localStorage
+    const userData = localStorage.getItem('user');
+    let userId = null;
+
+    if (userData) {
+      try {
+        const parsedUser = JSON.parse(userData);
+        userId = parsedUser.id;
+      } catch (err) {
+        // ignore
+      }
+    }
+
+    return userId && !readBy.includes(userId);
   }).length;
 
-  // Lấy thông báo từ Firestore
+  // Lấy thông báo từ Firestore cho user cụ thể
   const fetchNotifications = async () => {
     try {
-      const res = await fetch('http://localhost:3000/auth/notifications');
+      // Lấy user ID từ localStorage hoặc context
+      const userData = localStorage.getItem('user');
+      let userId = null;
+
+      if (userData) {
+        const parsedUser = JSON.parse(userData);
+        userId = parsedUser.id;
+      }
+
+      // Nếu không có userId, không fetch notifications
+      if (!userId) {
+        setNotifications([]);
+        setHasUnread(false);
+        return;
+      }
+
+      const res = await fetch(`http://localhost:3000/auth/notifications/user/${userId}`);
       const data = await res.json();
       if (data.success) {
         setNotifications(data.notifications);
         setHasUnread(data.notifications.length > 0);
+        console.log(`📨 Loaded ${data.notifications.length} notifications for user ${userId}`);
       } else {
         setNotifications([]);
+        setHasUnread(false);
       }
     } catch (err) {
+      console.error('Error fetching notifications:', err);
       setNotifications([]);
+      setHasUnread(false);
     }
   };
 
@@ -139,27 +172,41 @@ const Header: React.FC = () => {
                   // when opening (showing) popup, mark unread as read on server
                   const willOpen = !showNotify;
                   if (willOpen) {
-                    const uid = user?.email ?? null;
-                    const unreadIds = notifications.filter((n: any) => { const readBy = Array.isArray(n.readBy) ? n.readBy : []; return !readBy.includes(uid); }).map((n: any) => n._id || n.id).filter(Boolean);
-                    if (unreadIds.length > 0 && uid) {
-                      try {
-                        await fetch('http://localhost:3000/auth/notifications/mark-read', {
-                          method: 'PATCH',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ ids: unreadIds, userId: uid })
-                        });
-                      } catch (err) {
-                        // ignore
+                    // Get real user ID from localStorage
+                    const userData = localStorage.getItem('user');
+                    let userId = null;
+
+                    if (userData) {
+                      const parsedUser = JSON.parse(userData);
+                      userId = parsedUser.id;
+                    }
+
+                    if (userId) {
+                      const unreadIds = notifications.filter((n: any) => {
+                        const readBy = Array.isArray(n.readBy) ? n.readBy : [];
+                        return !readBy.includes(userId);
+                      }).map((n: any) => n._id || n.id).filter(Boolean);
+
+                      if (unreadIds.length > 0) {
+                        try {
+                          await fetch('http://localhost:3000/auth/notifications/mark-read', {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ ids: unreadIds, userId: userId })
+                          });
+                        } catch (err) {
+                          console.error('Error marking notifications as read:', err);
+                        }
+                        // refresh
+                        fetchNotifications();
                       }
-                      // refresh
-                      fetchNotifications();
                     }
                     setHasUnread(false);
                   }
                   setShowNotify(v => !v);
                 }}
               >
-                <Bell size={18} />
+                <Bell size={20} />
                 {unreadCount > 0 ? (
                   <span className="notification-badge">{unreadCount}</span>
                 ) : null}
@@ -239,8 +286,11 @@ const Header: React.FC = () => {
                     <div className="online-indicator"></div>
                   </div>
                   <div className="user-info">
-                    <span className="user-greeting">Xin chào</span>
-                    <span className="user-name text-black font-semibold">{user.name}</span>
+                    {/* <div className="user-greeting">Xin chào</div> */}
+                    <div className="user-name-row">
+                      <span className="user-display-name">{user.name}</span>
+                      <VerifiedBadge isVerified={user.isVerified} size="small" />
+                    </div>
                   </div>
                   <ChevronDown size={16} style={{ marginLeft: 8, color: '#65676b' }} />
                 </div>
@@ -282,8 +332,9 @@ const Header: React.FC = () => {
                         }}
                       />
                       <div>
-                        <div style={{ fontWeight: 600, fontSize: 16, color: '#1b1b1b' }}>
+                        <div style={{ fontWeight: 600, fontSize: 16, color: '#1b1b1b', display: 'flex', alignItems: 'center' }}>
                           {user.name}
+                          {/* <VerifiedBadge isVerified={user.isVerified} size="medium" /> */}
                         </div>
                         <div style={{ fontSize: 14, color: '#65676b' }}>
                           {user.email}

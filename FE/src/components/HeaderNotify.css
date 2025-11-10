@@ -4,16 +4,22 @@
   right: 2px;
   width: 9px;
   height: 9px;
-  background: linear-gradient(90deg,#ec4899,#6366f1);
+  background: linear-gradient(90deg, #ec4899, #6366f1);
   border-radius: 50%;
   box-shadow: 0 0 6px #ec489999;
   border: 2px solid #fff;
   animation: pulseDot 1.2s infinite;
 }
 @keyframes pulseDot {
-  0% { box-shadow: 0 0 6px #ec489999; }
-  50% { box-shadow: 0 0 12px #6366f1cc; }
-  100% { box-shadow: 0 0 6px #ec489999; }
+  0% {
+    box-shadow: 0 0 6px #ec489999;
+  }
+  50% {
+    box-shadow: 0 0 12px #6366f1cc;
+  }
+  100% {
+    box-shadow: 0 0 6px #ec489999;
+  }
 }
 .notify-popup {
   position: absolute;
@@ -21,7 +27,7 @@
   right: 16px;
   min-width: 320px;
   max-width: 90vw;
-  background: linear-gradient(135deg,#f3f4f6 70%,#e0e7ff 100%);
+  background: linear-gradient(135deg, #f3f4f6 70%, #e0e7ff 100%);
   border-radius: 1rem;
   box-shadow: 0 8px 32px 0 #6366f144;
   z-index: 100;
@@ -30,8 +36,14 @@
   animation: fadeInUp 0.3s;
 }
 @keyframes fadeInUp {
-  0% { opacity: 0; transform: translateY(20px); }
-  100% { opacity: 1; transform: translateY(0); }
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 .notify-popup-header {
   display: flex;
@@ -99,8 +111,11 @@
 /* Logout modal overlay and modal (centered) */
 .logout-modal-overlay {
   position: fixed !important;
-  top: 0; right: 0; bottom: 0; left: 0;
-  background: rgba(0,0,0,0.45);
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: rgba(0, 0, 0, 0.45);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -113,29 +128,122 @@
   max-width: 520px;
   background: #fff;
   border-radius: 12px;
-  box-shadow: 0 10px 30px rgba(2,6,23,0.2);
+  box-shadow: 0 10px 30px rgba(2, 6, 23, 0.2);
   overflow: hidden;
   display: flex;
   flex-direction: column;
   margin: 0 auto;
-  animation: modalPop .18s cubic-bezier(.2,.9,.2,1);
+  animation: modalPop 0.18s cubic-bezier(0.2, 0.9, 0.2, 1);
 }
 
 @keyframes modalPop {
-  from { transform: translateY(-8px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+  from {
+    transform: translateY(-8px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
-.logout-modal-header { padding: 18px 20px; border-bottom: 1px solid #eef2ff; }
-.logout-modal-header h3 { margin:0; font-size:18px; color:#111827; }
-.logout-modal-body { padding: 16px 20px; color:#374151; }
-.user-info-confirm { display:flex; gap:12px; align-items:center; margin-top:10px; }
-.avatar-small { width:40px; height:40px; border-radius:999px; object-fit:cover; }
-.logout-modal-footer { display:flex; gap:10px; padding: 14px 20px; justify-content:flex-end; border-top:1px solid #f3f4f6; }
+.logout-modal-header {
+  padding: 18px 20px;
+  border-bottom: 1px solid #eef2ff;
+}
+.logout-modal-header h3 {
+  margin: 0;
+  font-size: 18px;
+  color: #111827;
+}
+.logout-modal-body {
+  padding: 16px 20px;
+  color: #374151;
+}
+.user-info-confirm {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-top: 10px;
+}
+.avatar-small {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  object-fit: cover;
+}
+.logout-modal-footer {
+  display: flex;
+  gap: 10px;
+  padding: 14px 20px;
+  justify-content: flex-end;
+  border-top: 1px solid #f3f4f6;
+}
 
 /* Buttons */
-.btn { padding:8px 14px; border-radius:8px; cursor:pointer; font-weight:600; border:1px solid transparent; }
-.btn-cancel { background:#f3f4f6; color:#374151; }
-.btn-cancel:hover { background:#e6e9ef; }
-.btn-confirm { background: linear-gradient(90deg,#ef4444,#be123c); color:#fff; }
-.btn-confirm:hover { filter:brightness(0.98); }
+.btn {
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+.btn-cancel {
+  background: #f3f4f6;
+  color: #374151;
+}
+.btn-cancel:hover {
+  background: #e6e9ef;
+}
+.btn-confirm {
+  background: linear-gradient(90deg, #ef4444, #be123c);
+  color: #fff;
+}
+.btn-confirm:hover {
+  filter: brightness(0.98);
+}
 
+/* ===== USER NAME DISPLAY IMPROVEMENTS ===== */
+.user-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.user-greeting {
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.user-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.user-display-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1f2937;
+  line-height: 1.2;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ===== NOTIFICATION BUTTON STYLES ===== */
+.action-btn.notification-btn {
+  width: auto !important;
+  min-width: 40px;
+  height: auto !important;
+  min-height: 40px;
+  padding: 8px !important;
+}
+
+.notification-btn svg {
+  width: 15px !important;
+  height: 15px !important;
+}

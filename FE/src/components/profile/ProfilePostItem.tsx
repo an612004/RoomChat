@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Heart, Share2, MessageCircle, MoreHorizontal, Edit2, Trash2, Lock } from 'lucide-react';
 import ProfilePostMedia from './ProfilePostMedia';
 import { getTotalComments } from '../../utils/commentUtils';
+import VerifiedBadge from '../VerifiedBadge';
 
 // Hàm format thời gian động
 const formatTimeAgo = (createdAt: string): string => {
@@ -44,6 +45,7 @@ interface Post {
     authorId: string;
     authorName?: string;
     authorAvatar?: string;
+    authorVerified?: boolean;
     images?: string[];
     videos?: string[];
     likes?: string[];
@@ -58,6 +60,7 @@ interface User {
     avatar?: string;
     id?: string;
     _id?: string;
+    isVerified?: boolean;
 }
 
 interface ProfilePostItemProps {
@@ -202,9 +205,12 @@ const ProfilePostItem: React.FC<ProfilePostItemProps> = ({
                         <div style={{
                             fontWeight: 700,
                             fontSize: 15,
-                            color: '#1b1b1b'
+                            color: '#1b1b1b',
+                            display: 'flex',
+                            alignItems: 'center'
                         }}>
                             {post.authorName || user?.name}
+                            <VerifiedBadge isVerified={post.authorVerified || user?.isVerified} size="small" />
                         </div>
                         <div style={{
                             fontSize: 12,

@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import { db } from '../config/firebaseConfig';
 import admin from 'firebase-admin';
 import emailService from '../services/emailService';
+import Post from '../models/Post';
 
 const router: Router = express.Router();
 
@@ -53,7 +54,7 @@ router.get('/github', (req: Request, res: Response) => {
 });
 
 // Step 2: Handle GitHub callback
-router.get('/github/callback', async (req: Request, res: Response) => {
+router.get('/github/callback', async (req: Request, res: Response): Promise<void> => {
   const { code } = req.query;
   
   if (!code) {
@@ -186,7 +187,7 @@ router.get('/me', authenticateToken, (req: AuthenticatedRequest, res: Response) 
 });
 
 // Get all users from Firebase (for testing)
-router.get('/users', async (req: Request, res: Response) => {
+router.get('/users', async (req: Request, res: Response): Promise<void> => {
   try {
     const usersSnapshot = await db.collection('users').get();
     const users = usersSnapshot.docs.map(doc => ({
@@ -209,7 +210,7 @@ router.get('/users', async (req: Request, res: Response) => {
 });
 
 // Get login history from Firebase (for testing)
-router.get('/login-history', async (req: Request, res: Response) => {
+router.get('/login-history', async (req: Request, res: Response): Promise<void> => {
   try {
     const historySnapshot = await db.collection('loginHistory')
       .orderBy('loginTime', 'desc')
@@ -627,27 +628,99 @@ router.post('/verify-otp', async (req: Request, res: Response): Promise<void> =>
 import Notification from '../models/Notification';
 
 // Tạo thông báo (admin)
-router.post('/notifications', async (req: Request, res: Response) => {
+router.post('/notifications', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { title, content, link, userId } = req.body;
+    const { title, content, link, userId, sendType, recipients } = req.body;
     if (!title || !content) {
-      return res.status(400).json({ success: false, message: 'Thiếu tiêu đề hoặc nội dung' });
+      res.status(400).json({ success: false, message: 'Thiếu tiêu đề hoặc nội dung' });
+      return;
     }
+
+    // If sendType is 'selected', validate recipients
+    if (sendType === 'selected' && (!recipients || recipients.length === 0)) {
+      res.status(400).json({ 
+        success: false, 
+        message: 'Vui lòng chọn ít nhất một người dùng để gửi thông báo' 
+      });
+      return;
+    }
+
     const notify = new Notification({
       title,
       content,
       link: link || '',
       userId: userId || null,
+      sendType: sendType || 'all',
+      recipients: sendType === 'selected' ? recipients : [],
+      createdAt: new Date()
     });
+    
     await notify.save();
-    return res.json({ success: true, id: notify._id });
+    
+    console.log(`📢 Notification created:`, {
+      id: notify._id,
+      title,
+      sendType,
+      recipients: sendType === 'selected' ? recipients.length : 'all users'
+    });
+    
+    res.json({ success: true, id: notify._id });
   } catch (err) {
-    return res.status(500).json({ success: false, message: 'Lỗi khi lưu thông báo' });
+    console.error('Error creating notification:', err);
+    res.status(500).json({ success: false, message: 'Lỗi khi lưu thông báo' });
   }
 });
 
-// Lấy tất cả thông báo
-router.get('/notifications', async (req: Request, res: Response) => {
+// Update user verified status
+router.put('/users/:userId/verify', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { userId } = req.params;
+    const { isVerified } = req.body;
+
+    if (!userId) {
+      res.status(400).json({
+        success: false,
+        message: 'User ID is required'
+      });
+      return;
+    }
+
+    // Update user in Firestore
+    const userRef = db.collection('users').doc(userId);
+    const userDoc = await userRef.get();
+
+    if (!userDoc.exists) {
+      res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+      return;
+    }
+
+    await userRef.update({
+      isVerified: isVerified,
+      updatedAt: new Date()
+    });
+
+    console.log(`✅ User ${userId} verified status updated to: ${isVerified}`);
+
+    res.json({
+      success: true,
+      message: 'User verified status updated successfully',
+      data: { userId, isVerified }
+    });
+
+  } catch (error) {
+    console.error('Error updating verified status:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update user verified status'
+    });
+  }
+});
+
+// Lấy tất cả thông báo (admin)
+router.get('/notifications', async (req: Request, res: Response): Promise<void> => {
   try {
     const notifications = await Notification.find().sort({ createdAt: -1 });
     res.json({ success: true, notifications });
@@ -656,38 +729,454 @@ router.get('/notifications', async (req: Request, res: Response) => {
   }
 });
 
+// Lấy thông báo cho user cụ thể
+router.get('/notifications/user/:userId', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { userId } = req.params;
+    
+    if (!userId) {
+      res.status(400).json({ 
+        success: false, 
+        message: 'User ID is required' 
+      });
+      return;
+    }
+
+    // Tìm thông báo mà user có thể nhận:
+    // 1. Thông báo gửi cho tất cả (sendType: 'all')
+    // 2. Thông báo có chỉ định user cụ thể (sendType: 'selected' và userId trong recipients)
+    const notifications = await Notification.find({
+      $or: [
+        { sendType: 'all' },
+        { 
+          sendType: 'selected', 
+          recipients: { $in: [userId] } 
+        }
+      ]
+    }).sort({ createdAt: -1 });
+
+    console.log(`📨 User ${userId} có ${notifications.length} thông báo:`, {
+      total: notifications.length,
+      byType: {
+        all: notifications.filter(n => n.sendType === 'all').length,
+        selected: notifications.filter(n => n.sendType === 'selected').length
+      }
+    });
+
+    res.json({ 
+      success: true, 
+      notifications,
+      count: notifications.length,
+      userId: userId
+    });
+  } catch (err) {
+    console.error('Error fetching user notifications:', err);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Lỗi khi lấy thông báo người dùng' 
+    });
+  }
+});
+
+// API test: Lấy thông báo của user cụ thể (for debugging)
+router.get('/test/notifications/:userId', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { userId } = req.params;
+    
+    // Lấy tất cả thông báo để debug
+    const allNotifications = await Notification.find().sort({ createdAt: -1 });
+    const userNotifications = await Notification.find({
+      $or: [
+        { sendType: 'all' },
+        { 
+          sendType: 'selected', 
+          recipients: { $in: [userId] } 
+        }
+      ]
+    }).sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      userId: userId,
+      debug: {
+        totalNotifications: allNotifications.length,
+        userNotifications: userNotifications.length,
+        allNotificationsBreakdown: allNotifications.map(n => ({
+          id: n._id,
+          title: n.title,
+          sendType: n.sendType,
+          recipients: n.recipients || [],
+          recipientsCount: n.recipients ? n.recipients.length : 0
+        }))
+      }
+    });
+  } catch (err) {
+    console.error('Error in test endpoint:', err);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Test endpoint error' 
+    });
+  }
+});
+
 // Xóa thông báo (admin)
-router.delete('/notifications/:id', async (req: Request, res: Response) => {
+router.delete('/notifications/:id', async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ success: false, message: 'Thiếu id thông báo' });
+      res.status(400).json({ success: false, message: 'Thiếu id thông báo' });
+      return;
     }
     await Notification.findByIdAndDelete(id);
-    return res.json({ success: true });
+    res.json({ success: true });
   } catch (err) {
-    return res.status(500).json({ success: false, message: 'Lỗi khi xóa thông báo' });
+    res.status(500).json({ success: false, message: 'Lỗi khi xóa thông báo' });
   }
 });
 
 // Đánh dấu thông báo đã đọc cho 1 user (thêm userId vào readBy)
-router.patch('/notifications/mark-read', async (req: Request, res: Response) => {
+router.patch('/notifications/mark-read', async (req: Request, res: Response): Promise<void> => {
   try {
     const { ids, markAll, userId } = req.body;
-    if (!userId) return res.status(400).json({ success: false, message: 'Thiếu userId' });
+    if (!userId) {
+      res.status(400).json({ success: false, message: 'Thiếu userId' });
+      return;
+    }
     if (markAll) {
       // add userId to readBy for all notifications (no duplicates)
       await Notification.updateMany({}, { $addToSet: { readBy: userId } });
-      return res.json({ success: true });
+      res.json({ success: true });
+      return;
     }
     if (!Array.isArray(ids) || ids.length === 0) {
-      return res.status(400).json({ success: false, message: 'Thiếu ids hoặc markAll' });
+      res.status(400).json({ success: false, message: 'Thiếu ids hoặc markAll' });
+      return;
     }
     await Notification.updateMany({ _id: { $in: ids } }, { $addToSet: { readBy: userId } });
-    return res.json({ success: true });
+    res.json({ success: true });
   } catch (err) {
     console.error('Mark read error', err);
-    return res.status(500).json({ success: false, message: 'Lỗi khi cập nhật trạng thái đọc' });
+    res.status(500).json({ success: false, message: 'Lỗi khi cập nhật trạng thái đọc' });
+  }
+});
+
+// Lấy thông tin public của user (để hiển thị profile)
+router.get('/user/:userId', async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+    if (!userId) {
+      return res.status(400).json({ success: false, message: 'Thiếu userId' });
+    }
+
+    let userDoc;
+    let userRef;
+
+    // 🔍 Thử tìm theo document ID trước
+    userRef = db.collection('users').doc(userId);
+    userDoc = await userRef.get();
+
+    // 🔍 Nếu không tìm thấy, thử tìm theo email
+    if (!userDoc.exists) {
+      console.log(`🔍 Document ID ${userId} not found, trying email search...`);
+      const emailQuery = await db.collection('users').where('email', '==', userId).get();
+      
+      if (!emailQuery.empty) {
+        userDoc = emailQuery.docs[0];
+        console.log(`✅ Found user by email: ${userId}`);
+      }
+    }
+
+    if (!userDoc || !userDoc.exists) {
+      console.log(`❌ User not found: ${userId}`);
+      return res.status(404).json({ success: false, message: 'Không tìm thấy user' });
+    }
+
+    const userData = userDoc.data();
+    
+    // Lấy số lượng followers, following và posts
+    const followersCount = userData?.followers?.length || 0;
+    const followingCount = userData?.following?.length || 0;
+    
+    // Đếm số posts của user này
+    const postsCount = await Post.countDocuments({
+      $or: [
+        { authorId: userId },
+        { authorEmail: userId },
+        { authorId: userDoc.id },
+        { authorEmail: userData?.email }
+      ]
+    });
+
+    const publicUserData = {
+      id: userDoc.id,
+      name: userData?.name || 'Unknown',
+      email: userData?.email || '',
+      avatar: userData?.avatar || '',
+      bio: userData?.bio || '',
+      location: userData?.location || '',
+      isVerified: userData?.isVerified || false,
+      provider: userData?.provider || 'local',
+      createdAt: userData?.createdAt,
+      followersCount,
+      followingCount,
+      postsCount
+    };
+
+    console.log(`✅ Returning public user data for ${userId}:`, publicUserData);
+    return res.json({ success: true, user: publicUserData });
+  } catch (err) {
+    console.error('Error fetching user profile:', err);
+    return res.status(500).json({ success: false, message: 'Lỗi khi lấy thông tin user' });
+  }
+});
+
+// Kiểm tra trạng thái follow
+router.get('/follow-status/:targetUserId', async (req: Request, res: Response) => {
+  try {
+    const { targetUserId } = req.params;
+    const currentUserId = req.headers['user-id'] as string;
+    
+    if (!currentUserId || !targetUserId) {
+      return res.status(400).json({ success: false, message: 'Thiếu thông tin user' });
+    }
+
+    const currentUserRef = db.collection('users').doc(currentUserId);
+    const currentUserDoc = await currentUserRef.get();
+    
+    if (!currentUserDoc.exists) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy user hiện tại' });
+    }
+
+    const currentData = currentUserDoc.data() || {};
+    const following = currentData.following || [];
+    const isFollowing = following.includes(targetUserId);
+
+    return res.json({ success: true, isFollowing });
+  } catch (error) {
+    console.error('Error checking follow status:', error);
+    return res.status(500).json({ success: false, message: 'Lỗi server' });
+  }
+});
+
+// Lấy danh sách followers của user
+router.get('/user/:userId/followers', async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+    if (!userId) {
+      return res.status(400).json({ success: false, message: 'Thiếu userId' });
+    }
+
+    let userDoc;
+    let userRef;
+
+    // 🔍 Thử tìm theo document ID trước
+    userRef = db.collection('users').doc(userId);
+    userDoc = await userRef.get();
+
+    // 🔍 Nếu không tìm thấy, thử tìm theo email
+    if (!userDoc.exists) {
+      const emailQuery = await db.collection('users').where('email', '==', userId).get();
+      if (!emailQuery.empty) {
+        userDoc = emailQuery.docs[0];
+      }
+    }
+
+    if (!userDoc || !userDoc.exists) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy user' });
+    }
+
+    const userData = userDoc.data();
+    const followerIds = userData?.followers || [];
+
+    // Lấy thông tin chi tiết của từng follower
+    const followers = [];
+    for (const followerId of followerIds) {
+      try {
+        const followerRef = db.collection('users').doc(followerId);
+        const followerDoc = await followerRef.get();
+        
+        if (followerDoc.exists) {
+          const followerData = followerDoc.data();
+          followers.push({
+            id: followerDoc.id,
+            name: followerData?.name || 'Unknown',
+            email: followerData?.email || '',
+            avatar: followerData?.avatar || '',
+            isVerified: followerData?.isVerified || false,
+            provider: followerData?.provider || 'local'
+          });
+        }
+      } catch (error) {
+        console.error(`Error fetching follower ${followerId}:`, error);
+      }
+    }
+
+    console.log(`✅ Returning ${followers.length} followers for user ${userId}`);
+    return res.json({ success: true, followers, count: followers.length });
+  } catch (error) {
+    console.error('Error fetching followers:', error);
+    return res.status(500).json({ success: false, message: 'Lỗi server' });
+  }
+});
+
+// Lấy danh sách following của user
+router.get('/user/:userId/following', async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+    if (!userId) {
+      return res.status(400).json({ success: false, message: 'Thiếu userId' });
+    }
+
+    let userDoc;
+    let userRef;
+
+    // 🔍 Thử tìm theo document ID trước
+    userRef = db.collection('users').doc(userId);
+    userDoc = await userRef.get();
+
+    // 🔍 Nếu không tìm thấy, thử tìm theo email
+    if (!userDoc.exists) {
+      const emailQuery = await db.collection('users').where('email', '==', userId).get();
+      if (!emailQuery.empty) {
+        userDoc = emailQuery.docs[0];
+      }
+    }
+
+    if (!userDoc || !userDoc.exists) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy user' });
+    }
+
+    const userData = userDoc.data();
+    const followingIds = userData?.following || [];
+
+    // Lấy thông tin chi tiết của từng user đang được follow
+    const following = [];
+    for (const followingId of followingIds) {
+      try {
+        const followingRef = db.collection('users').doc(followingId);
+        const followingDoc = await followingRef.get();
+        
+        if (followingDoc.exists) {
+          const followingData = followingDoc.data();
+          following.push({
+            id: followingDoc.id,
+            name: followingData?.name || 'Unknown',
+            email: followingData?.email || '',
+            avatar: followingData?.avatar || '',
+            isVerified: followingData?.isVerified || false,
+            provider: followingData?.provider || 'local'
+          });
+        }
+      } catch (error) {
+        console.error(`Error fetching following ${followingId}:`, error);
+      }
+    }
+
+    console.log(`✅ Returning ${following.length} following for user ${userId}`);
+    return res.json({ success: true, following, count: following.length });
+  } catch (error) {
+    console.error('Error fetching following:', error);
+    return res.status(500).json({ success: false, message: 'Lỗi server' });
+  }
+});
+
+// Follow user
+router.post('/follow', async (req: Request, res: Response) => {
+  try {
+    const { targetUserId } = req.body;
+    const currentUserId = req.headers['user-id'] as string;
+    
+    if (!currentUserId || !targetUserId) {
+      return res.status(400).json({ success: false, message: 'Thiếu thông tin user' });
+    }
+
+    if (currentUserId === targetUserId) {
+      return res.status(400).json({ success: false, message: 'Không thể theo dõi chính mình' });
+    }
+
+    const currentUserRef = db.collection('users').doc(currentUserId);
+    const targetUserRef = db.collection('users').doc(targetUserId);
+
+    const [currentUserDoc, targetUserDoc] = await Promise.all([
+      currentUserRef.get(),
+      targetUserRef.get()
+    ]);
+
+    if (!currentUserDoc.exists || !targetUserDoc.exists) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy user' });
+    }
+
+    const currentData = currentUserDoc.data() || {};
+    const targetData = targetUserDoc.data() || {};
+    
+    const following = currentData.following || [];
+    const followers = targetData.followers || [];
+
+    if (following.includes(targetUserId)) {
+      return res.status(400).json({ success: false, message: 'Đã theo dõi user này rồi' });
+    }
+
+    await Promise.all([
+      currentUserRef.update({
+        following: [...following, targetUserId]
+      }),
+      targetUserRef.update({
+        followers: [...followers, currentUserId]
+      })
+    ]);
+
+    return res.json({ success: true, action: 'followed' });
+  } catch (error) {
+    console.error('Error following user:', error);
+    return res.status(500).json({ success: false, message: 'Lỗi server' });
+  }
+});
+
+// Unfollow user  
+router.post('/unfollow', async (req: Request, res: Response) => {
+  try {
+    const { targetUserId } = req.body;
+    const currentUserId = req.headers['user-id'] as string;
+    
+    if (!currentUserId || !targetUserId) {
+      return res.status(400).json({ success: false, message: 'Thiếu thông tin user' });
+    }
+
+    const currentUserRef = db.collection('users').doc(currentUserId);
+    const targetUserRef = db.collection('users').doc(targetUserId);
+
+    const [currentUserDoc, targetUserDoc] = await Promise.all([
+      currentUserRef.get(),
+      targetUserRef.get()
+    ]);
+
+    if (!currentUserDoc.exists || !targetUserDoc.exists) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy user' });
+    }
+
+    const currentData = currentUserDoc.data() || {};
+    const targetData = targetUserDoc.data() || {};
+    
+    const following = currentData.following || [];
+    const followers = targetData.followers || [];
+
+    if (!following.includes(targetUserId)) {
+      return res.status(400).json({ success: false, message: 'Chưa theo dõi user này' });
+    }
+
+    await Promise.all([
+      currentUserRef.update({
+        following: following.filter((id: string) => id !== targetUserId)
+      }),
+      targetUserRef.update({
+        followers: followers.filter((id: string) => id !== currentUserId)
+      })
+    ]);
+
+    return res.json({ success: true, action: 'unfollowed' });
+  } catch (error) {
+    console.error('Error unfollowing user:', error);
+    return res.status(500).json({ success: false, message: 'Lỗi server' });
   }
 });
 

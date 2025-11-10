@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import NotificationManager from '../../components/admin/NotificationManager';
 import './AdminPage.css'; // 👈 Import CSS riêng
 
 interface User {
@@ -9,6 +10,7 @@ interface User {
   avatar: string;
   provider: string;
   createdAt?: { seconds: number };
+  isVerified?: boolean;
 }
 
 interface LoginHistory {
@@ -29,74 +31,36 @@ const AdminPage: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [loginHistory, setLoginHistory] = useState<LoginHistory[]>([]);
   const [loading, setLoading] = useState(true);
-  // Thông báo admin state
-  const [notifications, setNotifications] = useState<any[]>([]);
-  const [notifyForm, setNotifyForm] = useState({ title: '', content: '', link: '' });
 
-  // Helper: extract first link from content
-  const extractFirstLink = (content: string) => {
-    const match = content.match(/(https?:\/\/[^\s]+)/);
-    return match ? match[1] : null;
-  };
 
-  // Delete notification
-  const handleDeleteNotify = async (idx: number) => {
-    const notify = notifications[idx];
-    const notifyId = notify._id || notify.id;
-    if (!notifyId) return;
+
+  // Toggle verified status
+  const handleToggleVerified = async (userId: string, currentStatus: boolean) => {
     try {
-      await fetch(`http://localhost:3000/auth/notifications/${notifyId}`, {
-        method: 'DELETE'
-      });
-      fetchNotifications();
-    } catch (err) {
-      alert('Lỗi khi xóa thông báo!');
-    }
-  };
-
-  const handleNotifyInput = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-  setNotifyForm({ ...notifyForm, [e.target.name]: e.target.value });
-  };
-  const handleAddNotify = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!notifyForm.title || !notifyForm.content) return;
-    try {
-      const res = await fetch('http://localhost:3000/auth/notifications', {
-        method: 'POST',
+      const res = await fetch(`http://localhost:3000/auth/users/${userId}/verify`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(notifyForm)
+        body: JSON.stringify({ isVerified: !currentStatus })
       });
       const data = await res.json();
       if (data.success) {
-        setNotifyForm({ title: '', content: '', link: '' });
-        fetchNotifications();
+        // Cập nhật local state
+        setUsers(prev => prev.map(user => 
+          user.id === userId 
+            ? { ...user, isVerified: !currentStatus }
+            : user
+        ));
       } else {
-        alert('Lỗi khi tạo thông báo!');
+        alert('Lỗi khi cập nhật trạng thái tích xanh!');
       }
     } catch (err) {
-      alert('Lỗi khi tạo thông báo!');
+      alert('Lỗi khi cập nhật trạng thái tích xanh!');
     }
   };
 
   useEffect(() => {
     fetchData();
-    fetchNotifications();
   }, []);
-
-  // Lấy thông báo từ Firestore
-  const fetchNotifications = async () => {
-    try {
-      const res = await fetch('http://localhost:3000/auth/notifications');
-      const data = await res.json();
-      if (data.success) {
-        setNotifications(data.notifications);
-      } else {
-        setNotifications([]);
-      }
-    } catch (err) {
-      setNotifications([]);
-    }
-  };
 
   const fetchData = async (): Promise<void> => {
     try {
@@ -131,88 +95,13 @@ const AdminPage: React.FC = () => {
         <Link to="/" className="back-home">← Quay về trang chủ</Link>
       </header>
 
-      {/* Notification Admin Section */}
-      <section className="admin-notify">
-        <h2>🔔 Tạo thông báo</h2>
-        <form className="notify-form" onSubmit={handleAddNotify}>
-          <input
-            type="text"
-            name="title"
-            value={notifyForm.title}
-            onChange={handleNotifyInput}
-            placeholder="Tiêu đề thông báo"
-            required
-          />
-          <textarea
-            name="content"
-            value={notifyForm.content}
-            onChange={handleNotifyInput}
-            placeholder="Nội dung thông báo"
-            rows={2}
-            required
-          />
-          <input
-            type="text"
-            name="link"
-            value={notifyForm.link}
-            onChange={handleNotifyInput}
-            placeholder="Đường dẫn (tuỳ chọn)"
-            style={{marginTop:8}}
-          />
-          <button type="submit" className="notify-btn">Tạo thông báo</button>
-        </form>
-        <div className="notify-list">
-          {Array.isArray(notifications) && notifications.length === 0 ? (
-            <div className="empty-text">Chưa có thông báo nào</div>
-          ) : (
-            Array.isArray(notifications) && notifications
-              .sort((a, b) => {
-                const dateA = a.createdAt ? new Date(a.createdAt).getTime() : (a.date && a.date.seconds ? a.date.seconds * 1000 : 0);
-                const dateB = b.createdAt ? new Date(b.createdAt).getTime() : (b.date && b.date.seconds ? b.date.seconds * 1000 : 0);
-                return dateB - dateA;
-              })
-              .map((notify: any, idx: number) => {
-                const link = notify.link || extractFirstLink(notify.content);
-                let dateStr = '';
-                if (notify.createdAt) {
-                  const d = new Date(notify.createdAt);
-                  dateStr = isNaN(d.getTime()) ? '' : d.toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' });
-                } else if (notify.date && typeof notify.date === 'object' && (notify.date.seconds || notify.date._seconds)) {
-                  const sec = notify.date.seconds || notify.date._seconds;
-                  dateStr = new Date(sec * 1000).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' });
-                } else if (notify.date) {
-                  const d = new Date(notify.date);
-                  dateStr = isNaN(d.getTime()) ? '' : d.toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' });
-                }
-                return (
-                  <div key={notify._id || idx} className="notify-item" style={{position: 'relative', minWidth: 220, margin: '8px', borderRadius: '16px', boxShadow: '0 2px 8px #eee', background: '#fff', padding: '18px 18px 12px 18px'}}>
-                    <button
-                      className="notify-delete-btn"
-                      title="Xóa thông báo"
-                      style={{position: 'absolute', top: 8, right: 12, background: 'none', border: 'none', color: '#e11d48', fontWeight: 'bold', fontSize: 14, cursor: 'pointer', zIndex: 2}}
-                      onClick={() => handleDeleteNotify(notifications.findIndex((n:any) => (n._id || n.id) === (notify._id || notify.id)))}
-                    >
-                      ✖
-                    </button>
-                    <button
-                      className="notify-btn-item"
-                      style={{width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: link ? 'pointer' : 'default', padding: 0}}
-                      onClick={() => {
-                        if (link) {
-                          window.open(link, '_blank', 'noopener,noreferrer');
-                        }
-                      }}
-                    >
-                      <div className="notify-title" style={{fontWeight: 600, fontSize: 18, color: '#6d28d9', marginBottom: 4}}>{notify.title}</div>
-                      <div className="notify-content" style={{fontSize: 15, marginBottom: 6}} dangerouslySetInnerHTML={{__html: notify.content.replace(/(https?:\/\/[^\s]+)/g, '<a href=\"$1\" target=\"_blank\" rel=\"noopener noreferrer\" style=\"color:#e11d48;text-decoration:underline\">$1</a>')}} />
-                      <div className="notify-date" style={{fontSize: 13, color: '#888'}}>{dateStr}</div>
-                    </button>
-                  </div>
-                );
-              })
-          )}
-        </div>
-      </section>
+      {/* Notification Manager */}
+      <NotificationManager 
+        users={users}
+        onRefreshNotifications={() => {
+          // Optional: Refresh any parent data if needed
+        }}
+      />
 
       <section className="admin-cards">
         <Link to="/admin/entertainment" className="admin-card pink">
@@ -243,6 +132,7 @@ const AdminPage: React.FC = () => {
                 <th>Tên</th>
                 <th>Email</th>
                 <th>Nhà cung cấp</th>
+                <th>Tích xanh</th>
                 <th>Ngày tạo</th>
               </tr>
             </thead>
@@ -250,9 +140,35 @@ const AdminPage: React.FC = () => {
               {users.map((u, i) => (
                 <tr key={u.id || i}>
                   <td><img src={u.avatar} alt={u.name} className="avatar" /></td>
-                  <td>{u.name}</td>
+                  <td>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      {u.name}
+                      {u.isVerified && (
+                        <span 
+                          title="Tài khoản đã xác minh"
+                          style={{ 
+                            color: '#10B981', 
+                            fontSize: '16px',
+                            fontWeight: 'bold'
+                          }}
+                        >
+                          ✓
+                        </span>
+                      )}
+                    </div>
+                  </td>
                   <td>{u.email}</td>
                   <td><span className="tag blue">{u.provider}</span></td>
+                  <td>
+                    <label className="verified-toggle">
+                      <input 
+                        type="checkbox" 
+                        checked={u.isVerified || false}
+                        onChange={() => handleToggleVerified(u.id || '', u.isVerified || false)}
+                      />
+                      <span className="toggle-slider"></span>
+                    </label>
+                  </td>
                   <td>{u.createdAt ? new Date(u.createdAt.seconds * 1000).toLocaleString() : 'N/A'}</td>
                 </tr>
               ))}
@@ -287,6 +203,61 @@ const AdminPage: React.FC = () => {
             </tbody>
           </table>
         )}
+      </div>
+
+      {/* Test Notifications Section */}
+      <div className="data-section">
+        <h2>🧪 Test thông báo cho user</h2>
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <select 
+            id="testUserId" 
+            style={{ 
+              padding: '0.5rem', 
+              borderRadius: '0.5rem', 
+              border: '1px solid #ddd',
+              minWidth: '200px'
+            }}
+          >
+            <option value="">Chọn user để test...</option>
+            {users.map(user => (
+              <option key={user.id} value={user.id}>
+                {user.name} ({user.email})
+              </option>
+            ))}
+          </select>
+          <button 
+            onClick={async () => {
+              const select = document.getElementById('testUserId') as HTMLSelectElement;
+              const userId = select.value;
+              if (!userId) {
+                alert('Vui lòng chọn user!');
+                return;
+              }
+              
+              try {
+                const res = await fetch(`http://localhost:3000/auth/test/notifications/${userId}`);
+                const data = await res.json();
+                if (data.success) {
+                  alert(`User ${userId} có ${data.debug.userNotifications} thông báo\n\nChi tiết:\n${JSON.stringify(data.debug, null, 2)}`);
+                } else {
+                  alert('Lỗi: ' + data.message);
+                }
+              } catch (err) {
+                alert('Lỗi kết nối!');
+              }
+            }}
+            style={{
+              background: '#10b981',
+              color: 'white',
+              border: 'none',
+              padding: '0.5rem 1rem',
+              borderRadius: '0.5rem',
+              cursor: 'pointer'
+            }}
+          >
+            🔍 Test notifications
+          </button>
+        </div>
       </div>
 
       <div className="refresh-container">

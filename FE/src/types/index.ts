@@ -8,6 +8,7 @@ export interface User {
   accessToken?: string;
   refreshToken?: string;
   bio?: string;
+  isVerified?: boolean;
 }
 
 // Firebase Auth Result

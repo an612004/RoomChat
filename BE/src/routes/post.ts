@@ -333,7 +333,38 @@ router.get('/:id/comments', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const comments = await Comment.find({ postId: id }).sort({ createdAt: 1 });
-    res.json({ success: true, comments });
+    
+    // Lấy thông tin verified từ Firestore cho các tác giả comment
+    const { db } = await import('../config/firebaseConfig');
+    const users = await db.collection('users').get();
+    const verifiedMap: Record<string, boolean> = {};
+    users.forEach((doc: any) => {
+      const data = doc.data();
+      if (data.email) {
+        verifiedMap[data.email] = data.isVerified || false;
+      }
+    });
+
+    // Thêm thông tin verified vào comments và replies
+    const commentsWithVerified = comments.map((comment: any) => {
+      const commentObj = comment.toObject ? comment.toObject() : comment;
+      const authorVerified = verifiedMap[commentObj.authorId] || false;
+      
+      // Thêm verified cho replies nếu có
+      if (commentObj.replies && commentObj.replies.length > 0) {
+        commentObj.replies = commentObj.replies.map((reply: any) => ({
+          ...reply,
+          authorVerified: verifiedMap[reply.authorId] || false
+        }));
+      }
+      
+      return {
+        ...commentObj,
+        authorVerified
+      };
+    });
+
+    res.json({ success: true, comments: commentsWithVerified });
   } catch (err) {
     res.status(500).json({ success: false });
   }
@@ -587,7 +618,8 @@ router.get('/:id/likes', async (req: Request, res: Response) => {
             id: userData.uid || userData.id || email,
             email: email,
             name: userData.displayName || userData.name || userData.fullName || email.split('@')[0],
-            avatar: userData.photoURL || userData.avatar || userData.profilePicture || 'https://via.placeholder.com/40x40?text=' + (userData.name?.charAt(0) || 'U')
+            avatar: userData.photoURL || userData.avatar || userData.profilePicture || 'https://via.placeholder.com/40x40?text=' + (userData.name?.charAt(0) || 'U'),
+            isVerified: userData.isVerified || false
           });
         } else {
           console.log(`❌ User not found: ${email}`);
@@ -596,7 +628,8 @@ router.get('/:id/likes', async (req: Request, res: Response) => {
             id: email,
             email: email,
             name: email.split('@')[0],
-            avatar: 'https://via.placeholder.com/40x40?text=' + email.charAt(0).toUpperCase()
+            avatar: 'https://via.placeholder.com/40x40?text=' + email.charAt(0).toUpperCase(),
+            isVerified: false
           });
         }
       } catch (userError) {
@@ -606,7 +639,8 @@ router.get('/:id/likes', async (req: Request, res: Response) => {
           id: email,
           email: email,
           name: email.split('@')[0],
-          avatar: 'https://via.placeholder.com/40x40?text=' + email.charAt(0).toUpperCase()
+          avatar: 'https://via.placeholder.com/40x40?text=' + email.charAt(0).toUpperCase(),
+          isVerified: false
         });
       }
     }
@@ -658,7 +692,8 @@ router.get('/:id/shares', async (req: Request, res: Response) => {
             email: post.authorId,
             name: userData.displayName || userData.name || userData.fullName || post.authorName || post.authorId.split('@')[0],
             avatar: userData.photoURL || userData.avatar || userData.profilePicture || post.authorAvatar || 'https://via.placeholder.com/40x40?text=' + (userData.name?.charAt(0) || 'U'),
-            sharedAt: post.createdAt
+            sharedAt: post.createdAt,
+            isVerified: userData.isVerified || false
           });
         } else {
           console.log(`❌ Shared user not found: ${post.authorId}`);
@@ -668,7 +703,8 @@ router.get('/:id/shares', async (req: Request, res: Response) => {
             email: post.authorId,
             name: post.authorName || post.authorId.split('@')[0],
             avatar: post.authorAvatar || 'https://via.placeholder.com/40x40?text=' + (post.authorName?.charAt(0) || post.authorId.charAt(0).toUpperCase()),
-            sharedAt: post.createdAt
+            sharedAt: post.createdAt,
+            isVerified: false
           });
         }
       } catch (userError) {
@@ -679,7 +715,8 @@ router.get('/:id/shares', async (req: Request, res: Response) => {
           email: post.authorId,
           name: post.authorName || post.authorId.split('@')[0],
           avatar: post.authorAvatar || 'https://via.placeholder.com/40x40?text=' + (post.authorName?.charAt(0) || post.authorId.charAt(0).toUpperCase()),
-          sharedAt: post.createdAt
+          sharedAt: post.createdAt,
+          isVerified: false
         });
       }
     }
@@ -835,6 +872,264 @@ router.post('/:postId/toggle-comments', auth, async (req: AuthenticatedRequest, 
   } catch (error) {
     console.error('❌ Toggle comments error:', error);
     return res.status(500).json({ message: 'Server error', error });
+  }
+});
+
+// Lấy tất cả posts của một user cụ thể
+router.get('/user/:userId', async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+    if (!userId) {
+      return res.status(400).json({ success: false, message: 'Thiếu userId' });
+    }
+
+    console.log(`🔍 Searching posts for user: ${userId}`);
+
+    // Tìm posts theo authorId hoặc authorEmail
+    const searchQuery = {
+      $or: [
+        { authorId: userId },
+        { authorEmail: userId }
+      ]
+    };
+
+    console.log('📝 Search query:', JSON.stringify(searchQuery, null, 2));
+    
+    // Kiểm tra xem có posts nào match authorId hoặc authorEmail riêng lẻ không
+    const postsByAuthorId = await Post.find({ authorId: userId });
+    const postsByAuthorEmail = await Post.find({ authorEmail: userId });
+    console.log(`📊 Posts by authorId "${userId}": ${postsByAuthorId.length}`);
+    console.log(`📊 Posts by authorEmail "${userId}": ${postsByAuthorEmail.length}`);
+
+    const posts = await Post.find(searchQuery).sort({ createdAt: -1 });
+
+    console.log(`✅ Found ${posts.length} posts for user ${userId}`);
+    
+    // 🔄 Fetch comments for each post from MongoDB
+    const postsWithComments = await Promise.all(
+      posts.map(async (post) => {
+        const comments = await Comment.find({ postId: (post._id as any).toString() }).sort({ createdAt: -1 });
+        console.log(`📝 Post ${post._id}: Found ${comments.length} comments`);
+        
+        return {
+          ...post.toObject(),
+          comments: comments.map(comment => ({
+            _id: comment._id,
+            content: comment.content,
+            authorId: comment.authorId,
+            authorName: comment.authorName,
+            authorAvatar: comment.authorAvatar,
+            createdAt: comment.createdAt,
+            replies: comment.replies || [],
+            reactions: comment.reactions || {}
+          }))
+        };
+      })
+    );
+    
+    // Log một vài posts đầu tiên để debug
+    if (postsWithComments.length > 0) {
+      console.log('📄 Sample posts with comments:', postsWithComments.slice(0, 2).map(p => ({
+        id: p._id,
+        authorId: p.authorId,
+        authorEmail: p.authorEmail,
+        content: p.content?.substring(0, 50) + '...',
+        commentsCount: p.comments?.length || 0
+      })));
+    }
+
+    // Log tất cả unique authorIds trong database để debug
+    const allAuthors = await Post.distinct('authorId');
+    const allEmails = await Post.distinct('authorEmail');
+    console.log('📊 All authorIds in DB:', allAuthors.slice(0, 10));
+    console.log('📊 All authorEmails in DB:', allEmails.slice(0, 10));
+    
+    return res.json({ 
+      success: true, 
+      posts: postsWithComments,
+      count: postsWithComments.length,
+      debug: {
+        searchedUserId: userId,
+        totalPostsInDB: await Post.countDocuments(),
+        allAuthors: allAuthors.length,
+        allEmails: allEmails.length,
+        totalCommentsLoaded: postsWithComments.reduce((sum, post) => sum + (post.comments?.length || 0), 0)
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error fetching user posts:', error);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Lỗi server', 
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Debug route - tìm posts theo partial match
+router.get('/debug/search/:searchTerm', async (req: Request, res: Response) => {
+  try {
+    const { searchTerm } = req.params;
+    
+    const results = await Post.find({
+      $or: [
+        { authorId: { $regex: searchTerm, $options: 'i' } },
+        { authorEmail: { $regex: searchTerm, $options: 'i' } },
+        { authorName: { $regex: searchTerm, $options: 'i' } }
+      ]
+    }).limit(10);
+
+    return res.json({
+      success: true,
+      searchTerm,
+      results: results.map(p => ({
+        id: p._id,
+        authorId: p.authorId,
+        authorEmail: p.authorEmail,
+        authorName: p.authorName,
+        content: p.content?.substring(0, 100)
+      }))
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: 'Search failed' });
+  }
+});
+
+// Debug route - lấy tất cả posts với author info để debug
+router.get('/debug/all-authors', async (req: Request, res: Response) => {
+  try {
+    const posts = await Post.find({}, {
+      _id: 1,
+      authorId: 1, 
+      authorEmail: 1,
+      authorName: 1,
+      content: 1,
+      createdAt: 1
+    }).sort({ createdAt: -1 }).limit(20);
+
+    const uniqueAuthors = await Post.aggregate([
+      {
+        $group: {
+          _id: {
+            authorId: "$authorId",
+            authorEmail: "$authorEmail"
+          },
+          count: { $sum: 1 },
+          latestPost: { $max: "$createdAt" }
+        }
+      },
+      { $sort: { count: -1 } }
+    ]);
+
+    return res.json({
+      success: true,
+      totalPosts: await Post.countDocuments(),
+      recentPosts: posts,
+      uniqueAuthors,
+      message: 'Debug info for posts collection'
+    });
+  } catch (error) {
+    console.error('Debug route error:', error);
+    return res.status(500).json({ 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Toggle like for a post
+router.post('/:id/like', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { userId } = req.body;
+
+    console.log('📝 Like API called:', { postId: id, userId });
+
+    if (!userId) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'userId is required' 
+      });
+    }
+
+    const post = await Post.findById(id);
+    if (!post) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Post not found' 
+      });
+    }
+
+    const currentLikes = post.likes || [];
+    const userAlreadyLiked = currentLikes.includes(userId);
+    
+    let newLikes: string[];
+    let liked: boolean;
+
+    if (userAlreadyLiked) {
+      // Remove like
+      newLikes = currentLikes.filter(id => id !== userId);
+      liked = false;
+      console.log('💔 Removing like from post', id, 'for user', userId);
+    } else {
+      // Add like
+      newLikes = [...currentLikes, userId];
+      liked = true;
+      console.log('❤️ Adding like to post', id, 'for user', userId);
+    }
+
+    // Update post with new likes
+    post.likes = newLikes;
+    await post.save();
+
+    console.log('✅ Like updated successfully:', { 
+      postId: id, 
+      userId, 
+      liked, 
+      likesCount: newLikes.length 
+    });
+
+    return res.json({
+      success: true,
+      liked: liked,
+      likes: newLikes.length,
+      likedUsers: newLikes
+    });
+
+  } catch (error) {
+    console.error('❌ Like API error:', error);
+    return res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Internal server error'
+    });
+  }
+});
+
+// Get likes for a post
+router.get('/:id/likes', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const post = await Post.findById(id);
+    if (!post) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Post not found' 
+      });
+    }
+
+    return res.json({
+      success: true,
+      likes: post.likes?.length || 0,
+      likedUsers: post.likes || []
+    });
+
+  } catch (error) {
+    console.error('❌ Get likes API error:', error);
+    return res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Internal server error'
+    });
   }
 });
 

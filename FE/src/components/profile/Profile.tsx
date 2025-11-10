@@ -1,4 +1,14 @@
+import React, { useState, useEffect } from 'react';
+import './Profile.css';
+import useAuth from "../../hooks/useAuth";
+import Header from '../Header';
+import { useUserSync } from '../../contexts/UserSyncContext';
+import VerifiedBadge from '../VerifiedBadge';
 import { Pencil } from 'lucide-react';
+
+import ProfilePosts from './ProfilePosts';
+import ProfilePostsDebug from './ProfilePostsDebug';
+
 // Hiển thị chi tiết user từ id/email nếu cần
 const FollowerItem: React.FC<{ userId: string }> = ({ userId }) => {
   const [info, setInfo] = React.useState<any>(null);
@@ -40,14 +50,6 @@ const FollowerItem: React.FC<{ userId: string }> = ({ userId }) => {
     <li style={{ color: '#888', padding: '8px 0', borderBottom: '1px solid #eee' }}>{info.id || userId}</li>
   );
 };
-import React, { useState, useEffect } from 'react';
-import './Profile.css';
-import useAuth from "../../hooks/useAuth";
-import Header from '../Header';
-import { useUserSync } from '../../contexts/UserSyncContext';
-
-import ProfilePosts from './ProfilePosts';
-import ProfilePostsDebug from './ProfilePostsDebug';
 
 const Profile = () => {
   const [showFollowers, setShowFollowers] = useState(false);
@@ -279,7 +281,10 @@ const Profile = () => {
                 <div style={{ position: 'relative', display: 'inline-block', marginBottom: 8 }}>
                   {!showEditName ? (
                     <>
-                      <h1 className="profile-name" style={{ fontSize: '2.2rem', fontWeight: 700, color: '#222', margin: 0 }}>{user?.name}</h1>
+                      <h1 className="profile-name" style={{ fontSize: '2.2rem', fontWeight: 700, color: '#222', margin: 0, display: 'flex', alignItems: 'center' }}>
+                        {user?.name}
+                        <VerifiedBadge isVerified={user?.isVerified} size="large" />
+                      </h1>
                       <button
                         onClick={() => {
                           setShowEditName(true);
@@ -696,7 +701,7 @@ const Profile = () => {
                     <ProfilePostsDebug userEmail={user.email} />
                   </div>
                 )}
-                
+
                 {/* User's posts section */}
                 {user && <ProfilePosts user={user} />}
               </div>

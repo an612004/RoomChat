@@ -9,6 +9,9 @@ import ShareModal from "./share_post/ShareModal";
 import { useUserSync } from "../../contexts/UserSyncContext";
 import { useSocket } from "../../contexts/SocketContext";
 import { usePostsRefresh } from "../../contexts/PostsContext";
+import VerifiedBadge from "../VerifiedBadge";
+import SeeProfile from "../see profile/See profile";
+import PostsDebugger from "../debug/PostsDebugger";
 
 // Global cache để lưu trữ posts và timestamp
 let postsCache: {
@@ -76,6 +79,10 @@ const Trangchu = () => {
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [modalTitle, setModalTitle] = useState("");
 
+  // SeeProfile modal states
+  const [showSeeProfile, setShowSeeProfile] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState<string>("");
+
   // Hàm kiểm tra đã theo dõi ai chưa
   const isFollowing = (targetId: string) => {
     return followingList.includes(targetId);
@@ -84,6 +91,28 @@ const Trangchu = () => {
   // Hàm kiểm tra có đang xử lý follow/unfollow không
   const isFollowingInProgress = (targetId: string) => {
     return followingInProgress.has(targetId);
+  };
+
+  // Hàm mở trang cá nhân người dùng
+  const handleShowProfile = (userId: string, event?: React.MouseEvent) => {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+
+    // Không mở profile của chính mình ở modal
+    if (user && (userId === user.id || userId === user.email)) {
+      return;
+    }
+
+    setSelectedUserId(userId);
+    setShowSeeProfile(true);
+  };
+
+  // Hàm đóng trang cá nhân
+  const handleCloseSeeProfile = () => {
+    setShowSeeProfile(false);
+    setSelectedUserId("");
   };
 
   // Hàm fetch danh sách users đã like bài viết
@@ -410,6 +439,7 @@ const Trangchu = () => {
           <button
             onClick={() => setShowPostForm(!showPostForm)}
             className="thought-btn"
+            style={{ display: "flex", alignItems: "center" }}
           >
             {user?.name}, bạn đang nghĩ gì thế?
           </button>
@@ -456,7 +486,8 @@ const Trangchu = () => {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
-                      authorId: user.email,
+                      authorId: user.id || user.email,
+                      authorEmail: user.email,
                       authorName: user.name,
                       authorAvatar: user.avatar,
                       content: postContent,
@@ -968,11 +999,13 @@ const Trangchu = () => {
                       className="post-header-avatar"
                       src={post.authorAvatar || "/default-avatar.png"}
                       alt={post.authorName}
+                      onClick={(e) => handleShowProfile(post.authorId || post.authorEmail, e)}
                       style={{
                         width: 40,
                         height: 40,
                         borderRadius: "50%",
                         boxShadow: "0 1px 6px rgba(0,0,0,0.08)",
+                        cursor: "pointer",
                       }}
                     />
                     <div
@@ -990,12 +1023,17 @@ const Trangchu = () => {
                         }}
                       >
                         <span
+                          onClick={(e) => handleShowProfile(post.authorId || post.authorEmail, e)}
                           style={{
                             fontWeight: 700,
                             fontSize: 15,
                             color: "#1b1b1b",
+                            display: "flex",
+                            alignItems: "center",
+                            cursor: "pointer",
                           }}>
                           {post.authorName}
+                          <VerifiedBadge isVerified={post.authorVerified} size="small" />
                         </span>
                         {/* ✅ Chỉ hiển thị nút nếu KHÔNG phải chính mình (check cả ID và email) */}
                         {user &&
@@ -2647,8 +2685,9 @@ const Trangchu = () => {
                       }}
                     />
                     <div>
-                      <div style={{ fontWeight: 600, fontSize: 15 }}>
+                      <div style={{ fontWeight: 600, fontSize: 15, display: "flex", alignItems: "center" }}>
                         {user.name}
+                        <VerifiedBadge isVerified={user.isVerified} size="small" />
                       </div>
                       {/*ẩn gmail đi*/}
                       {/* <div style={{ fontSize: 13, color: "#6b7280" }}>
@@ -2757,8 +2796,9 @@ const Trangchu = () => {
                       }}
                     />
                     <div>
-                      <div style={{ fontWeight: 600, fontSize: 15 }}>
+                      <div style={{ fontWeight: 600, fontSize: 15, display: "flex", alignItems: "center" }}>
                         {user.name}
+                        <VerifiedBadge isVerified={user.isVerified} size="small" />
                       </div>
                       <div style={{ fontSize: 13, color: "#6b7280" }}>
                         {user.email}
@@ -2775,6 +2815,17 @@ const Trangchu = () => {
             </div>
           </div>
         </div>
+      )}
+
+
+      {<div>...Đang tải thêm bài viết</div>}
+
+      {/* See Profile Modal */}
+      {showSeeProfile && selectedUserId && (
+        <SeeProfile
+          userId={selectedUserId}
+          onClose={handleCloseSeeProfile}
+        />
       )}
     </div>
   );

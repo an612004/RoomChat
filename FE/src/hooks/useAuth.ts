@@ -10,6 +10,7 @@ interface User {
   following?: string[];
   _id?: string;
   id?: string;
+  isVerified?: boolean;
 }
 
 interface AuthState {

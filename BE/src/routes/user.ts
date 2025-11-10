@@ -378,4 +378,110 @@ router.post('/update-profile', async (req: Request, res: Response) => {
   }
 });
 
+// Lấy thông tin public của user (để hiển thị profile)
+router.get('/:userId', async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+    if (!userId) {
+      res.status(400).json({ success: false, message: 'Thiếu userId' });
+      return;
+    }
+
+    let userDoc;
+    let userRef;
+
+    // 🔍 Thử tìm theo document ID trước
+    userRef = db.collection('users').doc(userId);
+    userDoc = await userRef.get();
+
+    // 🔍 Nếu không tìm thấy, thử tìm theo email
+    if (!userDoc.exists) {
+      console.log(`🔍 Document ID ${userId} not found, trying email search...`);
+      const emailQuery = await db.collection('users').where('email', '==', userId).get();
+      
+      if (!emailQuery.empty) {
+        userDoc = emailQuery.docs[0];
+        console.log(`✅ Found user by email: ${userId}`);
+      }
+    }
+
+    if (!userDoc || !userDoc.exists) {
+      console.log(`❌ User not found: ${userId}`);
+      res.status(404).json({ success: false, message: 'Không tìm thấy user' });
+      return;
+    }
+
+    const userData = userDoc.data();
+    
+    // Lấy số lượng followers, following và posts
+    const followersCount = userData?.followers?.length || 0;
+    const followingCount = userData?.following?.length || 0;
+    
+    // Đếm số posts của user này
+    const postsCount = await Post.countDocuments({
+      $or: [
+        { authorId: userId },
+        { authorEmail: userId },
+        { authorId: userDoc.id },
+        { authorEmail: userData?.email }
+      ]
+    });
+
+    const publicUserData = {
+      id: userDoc.id,
+      name: userData?.name || 'Unknown',
+      email: userData?.email || '',
+      avatar: userData?.avatar || '',
+      bio: userData?.bio || '',
+      location: userData?.location || '',
+      isVerified: userData?.isVerified || false,
+      provider: userData?.provider || 'local',
+      createdAt: userData?.createdAt,
+      followersCount,
+      followingCount,
+      postsCount
+    };
+
+    console.log(`✅ Returning public user data for ${userId}:`, publicUserData);
+    res.json({ success: true, user: publicUserData });
+    return;
+  } catch (err) {
+    console.error('Error fetching user profile:', err);
+    res.status(500).json({ success: false, message: 'Lỗi khi lấy thông tin user' });
+    return;
+  }
+});
+
+// Kiểm tra trạng thái follow
+router.get('/follow-status/:targetUserId', async (req: Request, res: Response) => {
+  try {
+    const { targetUserId } = req.params;
+    const currentUserId = req.headers['user-id'] as string;
+    
+    if (!currentUserId || !targetUserId) {
+      res.status(400).json({ success: false, message: 'Thiếu thông tin user' });
+      return;
+    }
+
+    const currentUserRef = db.collection('users').doc(currentUserId);
+    const currentUserDoc = await currentUserRef.get();
+    
+    if (!currentUserDoc.exists) {
+      res.status(404).json({ success: false, message: 'Không tìm thấy user hiện tại' });
+      return;
+    }
+
+    const currentData = currentUserDoc.data() || {};
+    const following = currentData.following || [];
+    const isFollowing = following.includes(targetUserId);
+
+    res.json({ success: true, isFollowing });
+    return;
+  } catch (error) {
+    console.error('Error checking follow status:', error);
+    res.status(500).json({ success: false, message: 'Lỗi server' });
+    return;
+  }
+});
+
 export default router;

@@ -2,6 +2,7 @@ import React from "react";
 const EmojiPicker = React.lazy(() => import("./EmojiPicker"));
 import StickerPicker from "./StickerPicker";
 import StickerDisplay from "./StickerDisplay";
+import VerifiedBadge from "../VerifiedBadge";
 
 import {
   Heart,
@@ -653,7 +654,10 @@ const CommentModal: React.FC<CommentModalProps> = ({
             />
             <div>
               {/* Author info */}
-              <div style={{ fontWeight: 700 }}>{post.authorName}</div>
+              <div style={{ fontWeight: 700, display: 'flex', alignItems: 'center' }}>
+                {post.authorName}
+                <VerifiedBadge isVerified={post.authorVerified} size="small" />
+              </div>
               <div style={{ fontSize: 12, color: "#666" }}>
                 {formatTime(post.createdAt, post._justNow)}
               </div>
@@ -995,6 +999,7 @@ const CommentModal: React.FC<CommentModalProps> = ({
                               }}
                             >
                               {c.authorName}
+                              <VerifiedBadge isVerified={c.authorVerified} size="small" />
                               {(() => {
                                 // Debug: Log the comparison
                                 console.log('🔍 Author check:', {
@@ -1069,7 +1074,7 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                         position: "absolute",
                                         right: "0",
                                         top: "100%",
-                                        marginTop: "4px",
+                                        marginTop: "-5px",
                                         background: "#fff",
                                         border: "1px solid #ddd",
                                         boxShadow:
@@ -1713,9 +1718,12 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                                   fontWeight: 700,
                                                   fontSize: 13,
                                                   color: "#6366f1",
+                                                  display: "flex",
+                                                  alignItems: "center"
                                                 }}
                                               >
                                                 {latestReply.authorName}
+                                                <VerifiedBadge isVerified={latestReply.authorVerified} size="small" />
                                                 {(() => {
                                                   // Debug: Log the reply author comparison
                                                   console.log('🔍 Reply author check:', {
@@ -2107,9 +2115,9 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                                         data-dropdown-menu
                                                         style={{
                                                           position: "absolute",
-                                                          right: "0",
-                                                          top: "100%",
-                                                          marginTop: "4px",
+                                                          right: "-10px",
+                                                          bottom: "100%",
+                                                          marginBottom: "8px",
                                                           background: "#fff",
                                                           border:
                                                             "1px solid #ddd",
@@ -2142,10 +2150,11 @@ const CommentModal: React.FC<CommentModalProps> = ({
                                                           }}
                                                           style={{
                                                             display: "block",
-                                                            padding: "8px 14px",
+                                                            padding: "5px 14px",
                                                             background: "none",
                                                             border: "none",
                                                             width: "100%",
+                                                            marginTop: "-5px",
                                                             textAlign: "left",
                                                             cursor: "pointer",
                                                             color: "#6366f1",

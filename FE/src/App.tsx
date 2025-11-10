@@ -57,6 +57,7 @@ const App: React.FC = () => {
           <Route path="/entertainment/home" element={<HomeE />} />
           <Route path="/trangchu/Trangchu" element={<Trangchu />} />
           <Route path="/profile" element={<Profileuser />} />
+          <Route path="/profile/:userId" element={<Profileuser />} />
           </Routes>
             </BrowserRouter>
           </PostsProvider>
